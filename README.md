@@ -1,120 +1,81 @@
 # Bizniz Tracker
 
-A lightweight, offline-first Flutter app for small business inventory and sales tracking. Manage products, log sales, view analytics, and export data—all stored locally on your device.
+Bizniz Tracker is a Flutter prototype for small business inventory and sales
+management. The current milestone focuses on the Material 3 dashboard and
+shared navigation. Dashboard figures and transactions are sample data; backend
+storage, online backup, and transaction processing are not part of this
+wireframe milestone.
 
-## Features
+## Run the prototype
 
-### 📦 Inventory Management
-- Add, edit, and delete products with cost & selling prices
-- Track stock levels in real-time
-- Set minimum stock thresholds and receive low-stock alerts
-- Organize products by categories with quick filter chips
-- View product details (ID, quantity, cost, selling price, category)
-
-### 💰 Sales Logging
-- Record sales with a searchable product selector (search by name, ID, or category)
-- Validate against available stock to prevent overselling
-- Automatic inventory reduction after each sale
-- Set custom selling price per transaction
-- Total revenue calculation
-
-### 📊 Analytics Dashboard
-- Daily sales summary (revenue, profit, sales count)
-- Low-stock alerts with quick navigation to inventory
-- Tabbed sales analytics (Daily / Weekly / Monthly)
-- Cost breakdown and profit tracking
-
-### 📤 Data Export
-- Export inventory as CSV (products with stock levels, costs, prices)
-- Export sales logs as CSV (transaction history with timestamps and revenue)
-- Saved to device Downloads or app documents directory
-
-### 🎨 Modern UI
-- Minimalist design with a custom color palette (#005057, #00777E, #4B3217, #785230, #AE9276)
-- Currency formatting for Philippine Peso (₱)
-- Theme-driven colors and typography for consistency
-- Responsive Material Design layout
-
-### 💾 Offline Storage
-- Uses Hive database for local, fast data persistence
-- No internet required—all data stays on your device
-- Works on Android, iOS, Windows, macOS, Linux, and web
-
-## How to Use
-
-1. **Add Products**: Go to Inventory → Tap + → Fill in product details (name, quantity, cost, selling price, category, min stock).
-2. **Log Sales**: Tap "Add Sale" → Search and select product → Enter quantity & price → Confirm. Inventory auto-updates.
-3. **View Analytics**: Check Dashboard for today's summary and low-stock alerts, or tap Summary to see weekly/monthly trends.
-4. **Export Data**: Tap the download icon on Inventory or Summary screens to export CSV files.
-5. **Manage Categories**: Use category chips on Inventory to filter by product type or tap + to add new categories.
-
-## Getting Started
-
-### Prerequisites
-- Flutter 3.32.8+ (stable channel)
-- Android SDK 30+ or iOS 12+
-- Dart 3.8.1+
-
-### Installation
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/ossw5/Bizniz-Tracker.git
-   cd Bizniz-Tracker
-   ```
-
-2. Install dependencies:
-   ```bash
-   flutter pub get
-   ```
-
-3. Run on a device/emulator:
-   ```bash
-   flutter run
-   ```
-
-4. Build a release APK (Android):
-   ```bash
-   flutter build apk --release
-   ```
-
-### Tech Stack
-- **Framework**: Flutter (cross-platform UI)
-- **State Management**: Riverpod (DI & providers)
-- **Database**: Hive (local persistence)
-- **Currency**: Intl (Philippine Peso formatting)
-- **Code Generation**: Hive adapters, build_runner
-
-## Project Structure
-```
-lib/
-├── main.dart                          # App entry & navigation
-├── core/
-│   ├── theme.dart                     # Minimalist theme & palette
-│   ├── formatters.dart                # Currency formatting (₱)
-│   ├── csv_export.dart                # CSV generation & export
-│   ├── hive_registry.dart             # Hive setup
-│   └── failure.dart                   # Error handling
-├── features/
-│   ├── products/
-│   │   ├── domain/                    # Product model
-│   │   ├── data/                      # Local datasource & repository
-│   │   └── presentation/              # Controllers & providers
-│   └── sales/
-│       ├── domain/                    # Sale model & repository interface
-│       ├── data/                      # Sales repository impl
-│       └── presentation/              # Screens & sales controller
+```powershell
+flutter pub get
+flutter run -d chrome
 ```
 
-## Future Enhancements
-- Push notifications for low-stock alerts
-- Multi-user support with cloud sync
-- Advanced analytics (charts, trends, forecasting)
-- Barcode scanning for faster product entry
-- Play Store distribution
+You can also run it on an available mobile device with `flutter run`.
 
-## License
-MIT License — feel free to use and modify this project.
+## Dashboard and navigation
 
-## Support
-For issues or feature requests, open an issue on GitHub or contact the maintainer.
+The dashboard previews business summaries, quick actions, a sales overview,
+inventory alerts, product performance, smart suggestions, and recent
+transactions. The five bottom destinations are Home, Inventory, Sales, Reports,
+and More. Inventory and Sales open clear placeholders for the assigned teams;
+the other unfinished destinations are also identified as prototype work.
+
+Quick actions navigate to the corresponding shared destination where one
+exists. Barcode scanning shows an explicit not-yet-implemented notice. The
+Daily, Weekly, and Monthly sales filters are interactive, but the chart and
+figures remain sample data.
+
+## Assigned module scaffolds
+
+The five team modules contain only the requested directory structure. No
+module screens, widgets, models, services, forms, or module-specific buttons
+have been implemented.
+
+```text
+lib/features/
+├── product_and_inventory_management/
+│   ├── screens/
+│   ├── widgets/
+│   ├── models/
+│   └── services/
+├── sales_management/
+│   ├── screens/
+│   ├── widgets/
+│   ├── models/
+│   └── services/
+├── expense_tracking/
+│   ├── screens/
+│   ├── widgets/
+│   ├── models/
+│   └── services/
+├── inventory_alerts_and_smart_suggestions/
+│   ├── screens/
+│   ├── widgets/
+│   ├── models/
+│   └── services/
+└── customer_credit_and_debit_tracking/
+    ├── screens/
+    ├── widgets/
+    ├── models/
+    └── services/
+```
+
+Each team member can add their work under the matching folder in
+`lib/features/`. The directories currently contain only `.gitkeep` files so
+Git preserves the empty structure.
+
+## Project notes
+
+- App startup is in `lib/main.dart`; the prior sales/inventory app entrypoint
+  has been preserved in `lib/legacy_main.dart`.
+- Shared app setup and theme are in `lib/app.dart` and
+  `lib/core/theme/app_theme.dart`.
+- The dashboard and reusable dashboard widgets are under
+  `lib/features/dashboard/`.
+- The existing `products/` and `sales/` code is retained, but is not connected
+  to the sample dashboard in this prototype milestone.
+
+The app uses Flutter Material 3 and the project targets Dart 3.8.1 or later.

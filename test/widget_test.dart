@@ -1,30 +1,47 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:bizniz_tracker/main.dart';
+import 'package:bizniz_tracker/app.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('dashboard navigation opens the inventory placeholder', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const BiznizTrackerApp());
+    await tester.pumpAndSettle();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(find.text('Business Overview'), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    await tester.tap(find.byIcon(Icons.inventory_2_outlined));
+    await tester.pumpAndSettle();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(
+      find.textContaining(
+        'The inventory module is reserved for its assigned team.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('record sale quick action opens the sales placeholder', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const BiznizTrackerApp());
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Record Sale'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Record Sale'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining(
+        'The sales module is reserved for its assigned team.',
+      ),
+      findsOneWidget,
+    );
   });
 }

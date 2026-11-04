@@ -14,6 +14,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int _currentIndex = 0;
+  bool _showInventoryAlerts = false;
 
   static const List<NavigationDestination> _destinations = [
     NavigationDestination(
@@ -43,19 +44,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ),
   ];
 
+  void _handleNavigate(int index, {bool openInventoryAlerts = false}) {
+    setState(() {
+      _currentIndex = index;
+      _showInventoryAlerts = openInventoryAlerts;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final pages = [
-      _HomeDashboardPage(
-        onNavigate: (index) => setState(() => _currentIndex = index),
-      ),
-      const _PlaceholderPage(
-        title: 'Inventory',
-        message:
-            'The inventory module is reserved for its assigned team. '
-            'Its screens, widgets, models, and services are scaffolded '
-            'under lib/features/product_and_inventory_management/.',
-      ),
+      _HomeDashboardPage(onNavigate: (index) => _handleNavigate(index)),
+      _showInventoryAlerts
+          ? _InventoryAlertsPage(
+              onBack: () => setState(() => _showInventoryAlerts = false),
+            )
+          : const _PlaceholderPage(
+              title: 'Inventory',
+              message:
+                  'The inventory module is reserved for its assigned team. '
+                  'Its screens, widgets, models, and services are scaffolded '
+                  'under lib/features/product_and_inventory_management/.',
+            ),
       const _PlaceholderPage(
         title: 'Sales',
         message:
@@ -85,11 +95,281 @@ class _DashboardScreenState extends State<DashboardScreen> {
         onDestinationSelected: (index) {
           setState(() {
             _currentIndex = index;
+            if (index != 1) {
+              _showInventoryAlerts = false;
+            }
           });
         },
         destinations: _destinations,
       ),
     );
+  }
+}
+
+class _InventoryAlertsPage extends StatefulWidget {
+  final VoidCallback onBack;
+
+  const _InventoryAlertsPage({required this.onBack});
+
+  @override
+  State<_InventoryAlertsPage> createState() => _InventoryAlertsPageState();
+}
+
+class _InventoryAlertsPageState extends State<_InventoryAlertsPage> {
+  final List<String> _mainTabs = [
+    'LOW STOCK',
+    'EXPIRATION',
+    'SLOW-MOVING',
+    'TOP SOLD',
+    'SUGGESTIONS',
+  ];
+
+  final List<String> _secondaryTabs = [
+    'SLOW-MOVING',
+    'FAST MOVING',
+    'EXPIRATION',
+  ];
+
+  int _selectedMainTab = 0;
+  int _selectedSecondaryTab = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: widget.onBack,
+        ),
+        title: const Text('Inventory Alerts'),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications_none_rounded),
+            onPressed: () {},
+          ),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+        child: Column(
+          children: [
+            SizedBox(
+              height: 42,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _mainTabs.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 10),
+                itemBuilder: (context, index) {
+                  final selected = index == _selectedMainTab;
+                  return GestureDetector(
+                    onTap: () => setState(() => _selectedMainTab = index),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? AppColors.forestGreen
+                            : Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        _mainTabs[index],
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: selected
+                              ? AppColors.white
+                              : AppColors.charcoal,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 36,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _secondaryTabs.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 10),
+                itemBuilder: (context, index) {
+                  final selected = index == _selectedSecondaryTab;
+                  return GestureDetector(
+                    onTap: () => setState(() => _selectedSecondaryTab = index),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 18),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? AppColors.forestGreen
+                            : Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        _secondaryTabs[index],
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: selected
+                              ? AppColors.white
+                              : AppColors.charcoal,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 14),
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppColors.warning.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.warning_amber_rounded,
+                          color: AppColors.warning,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _selectedMainTab == 0
+                                ? '5 products are running low on stock'
+                                : _selectedMainTab == 1
+                                ? '3 products are expiring soon or already expired'
+                                : _selectedMainTab == 2
+                                ? '3 products have not been sold for a while'
+                                : _selectedMainTab == 3
+                                ? 'Your top selling products in this period.'
+                                : 'Restock rice and canned goods before weekend demand peaks.',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.warning,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    decoration: InputDecoration(
+                      hintText: 'search product',
+                      filled: true,
+                      fillColor: AppColors.white,
+                      prefixIcon: const Icon(Icons.search_rounded),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  ..._buildAlertCards(),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildAlertCards() {
+    final cards = <Widget>[];
+    final label = _selectedMainTab == 0
+        ? 'LOW STOCK'
+        : _selectedMainTab == 1
+        ? 'EXPIRING'
+        : _selectedMainTab == 2
+        ? 'SLOW-MOVING'
+        : _selectedMainTab == 3
+        ? 'TOP SOLD'
+        : 'SUGGESTION';
+
+    for (var i = 0; i < 3; i++) {
+      cards.add(
+        Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.white,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: AppColors.forestGreen.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.image_outlined,
+                  color: AppColors.forestGreen,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '3x Sardines 250g',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.charcoal,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _selectedMainTab == 4 ? 'Suggested action' : 'Category',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.grey,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: _selectedMainTab == 4
+                            ? AppColors.forestGreen
+                            : AppColors.warning,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Text(
+                'QTY: 12',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.charcoal,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return cards;
   }
 }
 
@@ -255,7 +535,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
-            color: AppColors.forestGreen.withOpacity(0.08),
+            color: AppColors.forestGreen.withValues(alpha: 0.08),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -401,7 +681,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 12,
             offset: const Offset(0, 6),
           ),
@@ -689,7 +969,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.15),
+              color: color.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, color: color, size: 20),

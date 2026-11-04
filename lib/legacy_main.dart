@@ -10,6 +10,7 @@ import 'package:bizniz_tracker/features/sales/presentation/home_screen.dart';
 import 'package:bizniz_tracker/core/formatters.dart';
 import 'package:bizniz_tracker/core/theme.dart';
 import 'package:bizniz_tracker/core/csv_export.dart';
+import 'package:bizniz_tracker/features/sales/data/sale_repository_impl.dart';
 import 'package:bizniz_tracker/features/sales/presentation/add_sale_screen.dart';
 import 'package:bizniz_tracker/features/sales/presentation/sales_summary_screen.dart';
 
@@ -57,6 +58,7 @@ class ProductHomePage extends StatefulWidget {
 class _ProductHomePageState extends State<ProductHomePage> {
   late ProductController _productController;
   int _currentIndex = 0;
+  bool _showInventoryAlerts = false;
 
   @override
   void didChangeDependencies() {
@@ -76,7 +78,25 @@ class _ProductHomePageState extends State<ProductHomePage> {
   }
 
   void _onNavigate(int index) {
-    setState(() => _currentIndex = index);
+    setState(() {
+      _currentIndex = index;
+      if (index != 1) {
+        _showInventoryAlerts = false;
+      }
+    });
+  }
+
+  void _openInventoryAlerts() {
+    setState(() {
+      _showInventoryAlerts = true;
+      _currentIndex = 1;
+    });
+  }
+
+  void _closeInventoryAlerts() {
+    setState(() {
+      _showInventoryAlerts = false;
+    });
   }
 
   @override
@@ -91,10 +111,17 @@ class _ProductHomePageState extends State<ProductHomePage> {
         salesController: salesController,
         onNavigate: _onNavigate,
       ),
-      _InventoryScreen(
-        productController: _productController,
-        onRefresh: _refresh,
-      ),
+      _showInventoryAlerts
+          ? InventoryAlertsScreen(
+              productController: _productController,
+              saleRepository: saleRepository,
+              onBack: _closeInventoryAlerts,
+            )
+          : _InventoryScreen(
+              productController: _productController,
+              onRefresh: _refresh,
+              onOpenInventoryAlerts: _openInventoryAlerts,
+            ),
       AddSaleScreen(
         onNavigate: _onNavigate,
         productController: _productController,
@@ -134,10 +161,12 @@ class _ProductHomePageState extends State<ProductHomePage> {
 class _InventoryScreen extends StatefulWidget {
   final ProductController productController;
   final Function() onRefresh;
+  final VoidCallback onOpenInventoryAlerts;
 
   const _InventoryScreen({
     required this.productController,
     required this.onRefresh,
+    required this.onOpenInventoryAlerts,
   });
 
   @override
@@ -169,6 +198,21 @@ class _InventoryScreenState extends State<_InventoryScreen> {
         title: const Text('Inventory Management'),
         centerTitle: true,
         actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: TextButton(
+              onPressed: widget.onOpenInventoryAlerts,
+              style: TextButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: const Text('INVENTORY ALERT'),
+            ),
+          ),
           IconButton(
             tooltip: 'Export CSV',
             onPressed: () async {
@@ -238,7 +282,7 @@ class _InventoryScreenState extends State<_InventoryScreen> {
                                 selected: _selectedCategory == null,
                                 selectedColor: Theme.of(
                                   context,
-                                ).colorScheme.primary.withOpacity(0.12),
+                                ).colorScheme.primary.withValues(alpha: 0.12),
                                 labelStyle: Theme.of(
                                   context,
                                 ).textTheme.bodyMedium,
@@ -255,7 +299,7 @@ class _InventoryScreenState extends State<_InventoryScreen> {
                                     selected: _selectedCategory == c,
                                     selectedColor: Theme.of(
                                       context,
-                                    ).colorScheme.primary.withOpacity(0.12),
+                                    ).colorScheme.primary.withValues(alpha: 0.12),
                                     labelStyle: Theme.of(
                                       context,
                                     ).textTheme.bodyMedium,
@@ -481,6 +525,534 @@ class _InventoryScreenState extends State<_InventoryScreen> {
             onRefresh();
           }
         },
+      ),
+    );
+  }
+}
+
+class InventoryAlertsScreen extends StatefulWidget {
+  final ProductController productController;
+  final SaleRepositoryImpl saleRepository;
+  final VoidCallback onBack;
+
+  const InventoryAlertsScreen({
+    required this.productController,
+    required this.saleRepository,
+    required this.onBack,
+    super.key,
+  });
+
+  @override
+  State<InventoryAlertsScreen> createState() => _InventoryAlertsScreenState();
+}
+
+class _InventoryAlertsScreenState extends State<InventoryAlertsScreen> {
+  final List<String> _tabs = [
+    'LOW STOCK',
+    'EXPIRATION',
+    'SLOW-MOVING',
+    'TOP SOLD',
+    'SUGGESTIONS',
+  ];
+  int _selectedTab = 0;
+  String _selectedPeriod = 'THIS WEEK';
+  String _searchTerm = '';
+
+  List<ProductModel> _getLowStockProducts(List<ProductModel> products) {
+    return products
+        .where(
+          (product) =>
+              product.quantity > 0 &&
+              product.quantity <= product.minStock &&
+              product.minStock > 0,
+        )
+        .toList();
+  }
+
+  List<ProductModel> _filterProductsByName(
+    List<ProductModel> products,
+    String searchTerm,
+  ) {
+    final term = searchTerm.trim().toLowerCase();
+    if (term.isEmpty) return products;
+    return products
+        .where((product) => product.name.toLowerCase().contains(term))
+        .toList();
+  }
+
+  Widget _buildAlertBanner({
+    required Color color,
+    required String title,
+    required IconData icon,
+    required Widget trailing,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              title,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
+          ),
+          trailing,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProductCard(ProductModel product, {String? subtitle, String? status}) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                Icons.image_outlined,
+                color: theme.colorScheme.primary,
+                size: 26,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    product.name,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (product.category.trim().isNotEmpty)
+                    Text(
+                      product.category,
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  if (subtitle != null) Text(subtitle, style: theme.textTheme.bodySmall),
+                  if (status != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        status,
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: product.quantity == 0
+                              ? Colors.red
+                              : Colors.orange,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  'QTY: ${product.quantity}',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (product.minStock > 0)
+                  Text(
+                    'MIN: ${product.minStock}',
+                    style: theme.textTheme.bodySmall,
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLowStockTab(List<ProductModel> products) {
+    final lowStockProducts = _filterProductsByName(
+      _getLowStockProducts(products),
+      _searchTerm,
+    );
+
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          _buildAlertBanner(
+            color: Colors.red,
+            icon: Icons.warning_amber_rounded,
+            title: '${lowStockProducts.length} products are running low on stock',
+            trailing: const Icon(Icons.warning_amber_rounded, color: Colors.red),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            decoration: const InputDecoration(
+              hintText: 'search product',
+              prefixIcon: Icon(Icons.search),
+              filled: true,
+            ),
+            onChanged: (value) => setState(() => _searchTerm = value),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: lowStockProducts.isEmpty
+                ? const Center(child: Text('No low-stock products found.'))
+                : ListView(
+                    children: lowStockProducts
+                        .map(
+                          (product) => _buildProductCard(
+                            product,
+                            subtitle: product.category.isEmpty
+                                ? 'Category not set'
+                                : product.category,
+                            status: product.quantity == 0
+                                ? 'OUT OF STOCK'
+                                : 'LOW STOCK',
+                          ),
+                        )
+                        .toList(),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExpirationTab(List<ProductModel> products) {
+    const expirationMessage =
+        'No expiration tracking data is available in the current project. '
+        'Please use the dedicated expiration management feature to maintain '
+        'batch and expiry records before inventory alerts can monitor them.';
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          _buildAlertBanner(
+            color: Colors.amber,
+            icon: Icons.calendar_today_rounded,
+            title: '0 products are expiring soon or already expired',
+            trailing: const Icon(Icons.info_outline_rounded, color: Colors.amber),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: Center(
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    expirationMessage,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSlowMovingTab(List<ProductModel> products) {
+    final salesFuture = widget.saleRepository.getAllSales();
+
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          FutureBuilder<List<Sale>>(
+            future: salesFuture,
+            builder: (context, snapshot) {
+              final count = snapshot.hasData
+                  ? _filterProductsByName(
+                      products.where((product) {
+                        if (!snapshot.hasData) return false;
+                        final matchingSales = snapshot.data!
+                            .where((sale) => sale.productId == product.id)
+                            .toList();
+                        if (matchingSales.isEmpty) return false;
+                        final lastDate = matchingSales.reduce(
+                          (a, b) => a.saleDate.isAfter(b.saleDate) ? a : b,
+                        ).saleDate;
+                        final daysSince = DateTime.now().difference(lastDate).inDays;
+                        return daysSince >= 30;
+                      }).toList(),
+                      _searchTerm,
+                    ).length
+                  : 0;
+
+              return _buildAlertBanner(
+                color: Colors.purple,
+                icon: Icons.schedule_rounded,
+                title: '$count products have not been sold for a while',
+                trailing: const Icon(Icons.schedule_rounded, color: Colors.purple),
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            decoration: const InputDecoration(
+              hintText: 'search product',
+              prefixIcon: Icon(Icons.search),
+              filled: true,
+            ),
+            onChanged: (value) => setState(() => _searchTerm = value),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: FutureBuilder<List<Sale>>(
+              future: salesFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return const Center(child: Text('No sales history found.'));
+                }
+
+                final salesList = snapshot.data!;
+                final items = products.where((product) {
+                  final matchingSales = salesList.where((sale) => sale.productId == product.id).toList();
+                  if (matchingSales.isEmpty) return false;
+                  final lastDate = matchingSales.reduce(
+                    (a, b) => a.saleDate.isAfter(b.saleDate) ? a : b,
+                  ).saleDate;
+                  final daysSince = DateTime.now().difference(lastDate).inDays;
+                  return daysSince >= 30;
+                }).toList();
+
+                final displayed = _filterProductsByName(items, _searchTerm);
+                return displayed.isEmpty
+                    ? const Center(child: Text('No slow-moving products found.'))
+                    : ListView(
+                        children: displayed
+                            .map((product) {
+                              final matchingSales = salesList
+                                  .where((sale) => sale.productId == product.id)
+                                  .toList();
+                              final lastDate = matchingSales.reduce(
+                                (a, b) => a.saleDate.isAfter(b.saleDate) ? a : b,
+                              ).saleDate;
+                              final daysSince = DateTime.now().difference(lastDate).inDays;
+                              return _buildProductCard(
+                                product,
+                                subtitle: 'Last sold: ${lastDate.toLocal().toString().split(' ')[0]}',
+                                status: 'SLOW-MOVING • $daysSince DAYS',
+                              );
+                            })
+                            .toList(),
+                      );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopSoldTab(List<ProductModel> products) {
+    final periodMap = {
+      'THIS DAY': 1,
+      'THIS WEEK': 7,
+      'THIS MONTH': 30,
+    };
+    final selectedWindow = periodMap[_selectedPeriod] ?? 7;
+
+    final salesFuture = widget.saleRepository.getAllSales();
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Text(
+            'Your top selling products in this period.',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: DropdownButton<String>(
+              value: _selectedPeriod,
+              items: periodMap.keys
+                  .map((period) => DropdownMenuItem(value: period, child: Text(period)))
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() => _selectedPeriod = value);
+                }
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: FutureBuilder<List<Sale>>(
+              future: salesFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return const Center(child: Text('No sales data available.'));
+                }
+
+                final sales = snapshot.data!;
+                final byProduct = <String, int>{};
+                final threshold = DateTime.now().subtract(Duration(days: selectedWindow));
+                for (final sale in sales) {
+                  if (sale.saleDate.isBefore(threshold)) continue;
+                  byProduct[sale.productId] =
+                      (byProduct[sale.productId] ?? 0) + sale.quantitySold;
+                }
+
+                final ordered = byProduct.entries.toList()
+                  ..sort((a, b) => b.value.compareTo(a.value));
+
+                if (ordered.isEmpty) {
+                  return const Center(child: Text('No sales in the selected period.'));
+                }
+
+                final matches = ordered.map((entry) {
+                  final product = products.firstWhere(
+                    (item) => item.id == entry.key,
+                    orElse: () => ProductModel(
+                      id: entry.key,
+                      name: 'Unknown product',
+                      quantity: 0,
+                      costPrice: 0,
+                      sellingPrice: 0,
+                    ),
+                  );
+                  return MapEntry(product, entry.value);
+                }).toList();
+
+                return ListView(
+                  children: matches
+                      .map(
+                        (entry) => _buildProductCard(
+                          entry.key,
+                          subtitle: entry.key.category.isEmpty
+                              ? 'Category not set'
+                              : entry.key.category,
+                          status: 'SOLD: ${entry.value} UNITS',
+                        ),
+                      )
+                      .toList(),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSuggestionsTab(List<ProductModel> products) {
+    final lowStockProducts = _getLowStockProducts(products);
+    final suggestions = lowStockProducts.isEmpty
+        ? <ProductModel>[]
+        : lowStockProducts.take(3).toList();
+
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          _buildAlertBanner(
+            color: Colors.green,
+            icon: Icons.lightbulb_outline_rounded,
+            title: 'Smart suggestions',
+            trailing: const Icon(Icons.auto_awesome_rounded, color: Colors.green),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: suggestions.isEmpty
+                ? const Center(child: Text('No suggestions available right now.'))
+                : ListView(
+                    children: suggestions
+                        .map(
+                          (product) => _buildProductCard(
+                            product,
+                            subtitle: 'Restock recommended before level falls below minimum stock.',
+                            status: 'REORDER SUGGESTED',
+                          ),
+                        )
+                        .toList(),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final products = widget.productController.state.products;
+    final screens = [
+      _buildLowStockTab(products),
+      _buildExpirationTab(products),
+      _buildSlowMovingTab(products),
+      _buildTopSoldTab(products),
+      _buildSuggestionsTab(products),
+    ];
+
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: widget.onBack,
+        ),
+        title: const Text('Inventory Alerts'),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications_none_rounded),
+            onPressed: () {},
+          ),
+        ],
+      ),
+      body: DefaultTabController(
+        length: _tabs.length,
+        child: Column(
+          children: [
+            TabBar(
+              isScrollable: true,
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.black87,
+              indicator: BoxDecoration(
+                color: Colors.green,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              tabs: _tabs.map((tab) => Tab(text: tab)).toList(),
+              onTap: (index) => setState(() => _selectedTab = index),
+            ),
+            Expanded(
+              child: IndexedStack(
+                index: _selectedTab,
+                children: screens,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

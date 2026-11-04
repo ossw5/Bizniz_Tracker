@@ -377,11 +377,11 @@ class _AddSaleScreenState extends State<AddSaleScreen> {
                         decoration: BoxDecoration(
                           color: Theme.of(
                             context,
-                          ).colorScheme.error.withOpacity(0.08),
+                          ).colorScheme.error.withValues(alpha: 0.08),
                           border: Border.all(
                             color: Theme.of(
                               context,
-                            ).colorScheme.error.withOpacity(0.2),
+                            ).colorScheme.error.withValues(alpha: 0.2),
                           ),
                           borderRadius: BorderRadius.circular(8),
                         ),

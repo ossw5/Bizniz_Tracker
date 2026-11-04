@@ -1,12 +1,24 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../legacy_main.dart' as legacy;
+import '../inventory_alerts_and_smart_suggestions/screens/inventory_alerts_screen.dart';
+import '../products/domain/product.dart';
+import '../products/presentation/controllers.dart';
+import '../sales/domain/sale_repository.dart';
 import 'widgets/quick_action_button.dart';
 import 'widgets/recent_transaction_item.dart';
 import 'widgets/summary_card.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  final ProductController? productController;
+  final SaleRepository? saleRepository;
+
+  const DashboardScreen({
+    super.key,
+    this.productController,
+    this.saleRepository,
+  });
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -44,27 +56,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ),
   ];
 
-  void _handleNavigate(int index, {bool openInventoryAlerts = false}) {
+  void _handleNavigate(int index) {
     setState(() {
       _currentIndex = index;
-      _showInventoryAlerts = openInventoryAlerts;
+      if (index != 1) _showInventoryAlerts = false;
+    });
+  }
+
+  void _openInventoryAlerts() {
+    setState(() {
+      _currentIndex = 1;
+      _showInventoryAlerts = true;
+    });
+  }
+
+  void _closeInventoryAlerts() {
+    setState(() {
+      _showInventoryAlerts = false;
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final pages = [
-      _HomeDashboardPage(onNavigate: (index) => _handleNavigate(index)),
+      _HomeDashboardPage(
+        onNavigate: (index) => _handleNavigate(index),
+        products: widget.productController?.state.products ?? const [],
+      ),
       _showInventoryAlerts
-          ? _InventoryAlertsPage(
-              onBack: () => setState(() => _showInventoryAlerts = false),
+          ? InventoryAlertsScreen(
+              productController: widget.productController,
+              saleRepository: widget.saleRepository,
+              onBack: _closeInventoryAlerts,
             )
-          : const _PlaceholderPage(
-              title: 'Inventory',
-              message:
-                  'The inventory module is reserved for its assigned team. '
-                  'Its screens, widgets, models, and services are scaffolded '
-                  'under lib/features/product_and_inventory_management/.',
+          : widget.productController == null
+          ? _InventoryUnavailablePage(
+              onOpenInventoryAlerts: _openInventoryAlerts,
+            )
+          : legacy.InventoryManagementScreen(
+              productController: widget.productController!,
+              onRefresh: () => setState(() {}),
+              onOpenInventoryAlerts: _openInventoryAlerts,
             ),
       const _PlaceholderPage(
         title: 'Sales',
@@ -81,8 +113,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       const _PlaceholderPage(
         title: 'More',
         message:
-            'Expense tracking, inventory alerts, customer credit, and settings '
-            'are reserved for future development.',
+            'Expense tracking, customer credit, and settings are reserved for '
+            'future development.',
       ),
     ];
 
@@ -93,12 +125,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         height: 72,
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) {
-          setState(() {
-            _currentIndex = index;
-            if (index != 1) {
-              _showInventoryAlerts = false;
-            }
-          });
+          _handleNavigate(index);
         },
         destinations: _destinations,
       ),
@@ -375,8 +402,9 @@ class _InventoryAlertsPageState extends State<_InventoryAlertsPage> {
 
 class _HomeDashboardPage extends StatefulWidget {
   final ValueChanged<int> onNavigate;
+  final List<ProductModel> products;
 
-  const _HomeDashboardPage({required this.onNavigate});
+  const _HomeDashboardPage({required this.onNavigate, required this.products});
 
   @override
   State<_HomeDashboardPage> createState() => _HomeDashboardPageState();
@@ -400,6 +428,9 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final formattedDate = '${_monthName(now.month)} ${now.day}, ${now.year}';
+    final lowStockCount = widget.products
+        .where((product) => product.isLowStock)
+        .length;
 
     final summaryCards = [
       SummaryCard(
@@ -425,14 +456,14 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
       ),
       SummaryCard(
         title: 'Total Products',
-        value: '128',
+        value: '${widget.products.length}',
         icon: Icons.inventory_2_rounded,
         accent: AppColors.grey,
-        note: '5 low stock',
+        note: 'In inventory',
       ),
       SummaryCard(
         title: 'Low-Stock Products',
-        value: '5',
+        value: '$lowStockCount',
         icon: Icons.warning_amber_rounded,
         accent: AppColors.warning,
         note: 'Needs restock',
@@ -510,7 +541,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
             const SizedBox(height: 22),
             _buildSalesOverviewCard(context),
             const SizedBox(height: 22),
-            _buildInventoryAlertsCard(context),
+            _buildInventoryAlertsCard(context, lowStockCount),
             const SizedBox(height: 22),
             _buildPerformanceCard(),
             const SizedBox(height: 22),
@@ -772,7 +803,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
     );
   }
 
-  Widget _buildInventoryAlertsCard(BuildContext context) {
+  Widget _buildInventoryAlertsCard(BuildContext context, int lowStockCount) {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -802,23 +833,16 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
           const SizedBox(height: 8),
           _alertRow(
             'Low Stock',
-            '5 products',
+            '$lowStockCount products',
             AppColors.warning,
             Icons.warning_amber_rounded,
           ),
           const Divider(),
           _alertRow(
-            'Near Expiration',
-            '3 products',
-            AppColors.warning,
+            'Expiration tracking',
+            'Not configured',
+            AppColors.grey,
             Icons.event_busy_rounded,
-          ),
-          const Divider(),
-          _alertRow(
-            'Expired',
-            '2 products',
-            AppColors.error,
-            Icons.error_rounded,
           ),
         ],
       ),
@@ -1102,6 +1126,26 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
     ];
     return months[month - 1];
   }
+}
+
+class _InventoryUnavailablePage extends StatelessWidget {
+  final VoidCallback onOpenInventoryAlerts;
+
+  const _InventoryUnavailablePage({required this.onOpenInventoryAlerts});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      title: const Text('Inventory Management'),
+      actions: [
+        TextButton(
+          onPressed: onOpenInventoryAlerts,
+          child: const Text('Inventory Alerts'),
+        ),
+      ],
+    ),
+    body: const Center(child: Text('Inventory data is unavailable.')),
+  );
 }
 
 class _PlaceholderPage extends StatelessWidget {

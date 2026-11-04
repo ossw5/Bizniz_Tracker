@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Product Expiration</title>
+
+  <style>
+    :root {
+      --primary: #6754b6;
+      --primary-light: #f0edff;
+      --border: #dedce8;
+      --text: #28252f;
+      --muted: #8b8992;
+      --background: #f5f4f8;
+      --white: #ffffff;
+      --green: #5e9c68;
+      --green-bg: #eaf5e9;
+      --yellow: #b3862b;
+      --yellow-bg: #fff4d8;
+      --red: #c75c6b;
+      --red-bg: #fdecef;
+      --orange: #bd8037;
+      --orange-bg: #fff0dc;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background: var(--background);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .app {
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 24px 12px;
+    }
+
+    .phone {
+      position: relative;
+      width: 375px;
+      min-height: 760px;
+      overflow: hidden;
+      background: var(--white);
+      border: 2px solid #26242a;
+      border-radius: 30px;
+      box-shadow: 0 16px 45px rgba(30, 25, 55, 0.16);
+    }
+
+    .speaker {
+      width: 44px;
+      height: 5px;
+      margin: 11px auto 5px;
+      border-radius: 10px;
+      background: #74717c;
+    }
+
+    .screen {
+      display: none;
+      min-height: 704px;
+      padding-bottom: 74px;
+      background: var(--white);
+    }
+
+    .screen.active {
+      display: block;
+    }
+
+    .topbar {
+      height: 58px;
+      display: grid;
+      grid-template-columns: 36px 1fr 36px;
+      align-items: center;
+      padding: 0 16px;
+      border-bottom: 1px solid #f0eff4;
+    }
+
+    .topbar h1 {
+      margin: 0;
+      overflow: hidden;
+      font-size: 16px;
+      text-align: center;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .icon-button {
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      color: var(--text);
+      background: transparent;
+      border: 0;
+      border-radius: 50%;
+      font-size: 21px;
+    }
+
+    .icon-button:hover {
+      background: #f2f1f5;
+    }
+
+    .content {
+      padding: 17px 20px 26px;
+    }
+
+    .eyebrow {
+      margin: 0 0 5px;
+      color: var(--primary);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .description {
+      margin: 0 0 18px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .field {
+      margin-bottom: 15px;
+    }
+
+    .field label {
+      display: block;
+      margin-bottom: 6px;
+      color: #625f69;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .input,
+    .select,
+    .textarea {
+      width: 100%;
+      min-height: 39px;
+      padding: 10px 11px;
+      color: var(--text);
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      outline: none;
+    }
+
+    .textarea {
+      min-height: 68px;
+      resize: vertical;
+    }
+
+    .input:focus,
+    .select:focus,
+    .textarea:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(103, 84, 182, 0.12);
+    }
+
+    .input-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .actions {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 25px;
+    }
+
+    .btn {
+      min-height: 39px;
+      padding: 9px 18px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-weight: 700;
+    }
+
+    .btn-primary {
+      color: #fff;
+      background: var(--primary);
+      border-color: var(--primary);
+    }
+
+    .btn-secondary {
+      color: #5d5964;
+      background: var(--white);
+    }
+
+    .btn-full {
+      width: 100%;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 62px;
+      padding: 5px 9px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .normal,
+    .sold {
+      color: var(--green);
+      background: var(--green-bg);
+    }
+
+    .nearing {
+      color: var(--yellow);
+      background: var(--yellow-bg);
+    }
+
+    .expired {
+      color: var(--red);
+      background: var(--red-bg);
+    }
+
+    .discarded {
+      color: var(--orange);
+      background: var(--orange-bg);
+    }
+
+    .batch-card,
+    .list-item,
+    .history-item {
+      padding: 14px 0;
+      border-bottom: 1px solid #eceaf0;
+    }
+
+    .batch-card:first-of-type {
+      border-top: 1px solid #eceaf0;
+    }
+
+    .row-between {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .item-title {
+      margin: 0 0 5px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .item-meta {
+      margin: 2px 0;
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.4;
+    }
+
+    .section-heading {
+      margin: 20px 0 8px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .filter-tabs {
+      display: flex;
+      gap: 7px;
+      margin: 13px 0 8px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .filter-tabs::-webkit-scrollbar {
+      display: none;
+    }
+
+    .filter {
+      padding: 6px 12px;
+      color: #77737f;
+      background: #f5f4f7;
+      border: 0;
+      border-radius: 15px;
+      font-size: 10px;
+      white-space: nowrap;
+    }
+
+    .filter.active {
+      color: var(--primary);
+      background: var(--primary-light);
+      font-weight: 700;
+    }
+
+    .summary {
+      margin: 4px 0 17px;
+      padding: 15px;
+      background: var(--primary-light);
+      border: 1px solid #c8c0f3;
+      border-radius: 5px;
+    }
+
+    .summary h2 {
+      margin: 0 0 5px;
+      font-size: 14px;
+    }
+
+    .summary p {
+      margin: 0;
+      color: #6e6879;
+      font-size: 11px;
+    }
+
+    .radio-group {
+      display: flex;
+      gap: 8px;
+    }
+
+    .radio-card {
+      flex: 1;
+      padding: 9px 5px;
+      color: #77737e;
+      background: #f7f6f9;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 10px;
+      text-align: center;
+    }
+
+    .radio-card.active {
+      color: var(--primary);
+      background: var(--primary-light);
+      border-color: var(--primary);
+      font-weight: 700;
+    }
+
+    .selected-batch {
+      margin-bottom: 17px;
+      padding: 12px;
+      background: var(--primary-light);
+      border: 1px solid #bcb1f1;
+      border-radius: 4px;
+    }
+
+    .selected-batch strong {
+      display: block;
+      margin-bottom: 3px;
+      font-size: 12px;
+    }
+
+    .selected-batch span {
+      color: #77717f;
+      font-size: 10px;
+    }
+
+    .history-grid {
+      display: grid;
+      grid-template-columns: 74px 1fr auto;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .date {
+      color: #76727c;
+      font-size: 9px;
+      line-height: 1.4;
+    }
+
+    .error {
+      display: none;
+      margin: 10px 0;
+      padding: 10px;
+      color: #9f3347;
+      background: var(--red-bg);
+      border: 1px solid #f4b8c2;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+
+    .empty {
+      padding: 40px 10px;
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+    }
+
+    .bottom-nav {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 5;
+      height: 65px;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      background: #fff;
+      border-top: 1px solid #e9e7ed;
+    }
+
+    .nav-item {
+      padding: 8px 2px 4px;
+      color: #817d87;
+      background: transparent;
+      border: 0;
+      font-size: 9px;
+      text-align: center;
+    }
+
+    .nav-icon {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 15px;
+    }
+
+    .nav-item.active {
+      color: var(--primary);
+      font-weight: 700;
+    }
+
+    .toast {
+      position: absolute;
+      right: 22px;
+      bottom: 82px;
+      left: 22px;
+      z-index: 20;
+      display: none;
+      padding: 12px;
+      color: #fff;
+      background: #302d36;
+      border-radius: 5px;
+      font-size: 11px;
+      text-align: center;
+      box-shadow: 0 7px 20px rgba(0, 0, 0, 0.18);
+    }
+
+    @media (max-width: 430px) {
+      .app {
+        padding: 0;
+      }
+
+      .phone {
+        width: 100%;
+        min-height: 100vh;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+      }
+
+      .screen {
+        min-height: calc(100vh - 17px);
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="app">
+    <section class="phone">
+      <div class="speaker"></div>
+
+      <!-- EXPIRATION LIST -->
+      <article class="screen active" id="expiration-list">
+        <header class="topbar">
+          <button class="icon-button" type="button" onclick="goBack()">‹</button>
+          <h1>Expiration List</h1>
+          <button class="icon-button" type="button">⋯</button>
+        </header>
+
+        <div class="content">
+          <p class="eyebrow">06 &nbsp; Product Expiration List</p>
+
+          <div class="field">
+            <input
+              class="input"
+              id="searchInput"
+              type="search"
+              placeholder="Search product or batch"
+              oninput="renderExpirationList()"
+            >
+          </div>
+
+          <div class="filter-tabs">
+            <button class="filter active" type="button" data-filter="All">All</button>
+            <button class="filter" type="button" data-filter="Normal">Normal</button>
+            <button class="filter" type="button" data-filter="Nearing">Alerts</button>
+            <button class="filter" type="button" data-filter="Expired">Expired</button>
+          </div>
+
+          <div id="expirationItems"></div>
+
+          <div class="actions">
+            <button class="btn btn-secondary" type="button" onclick="showScreen('history')">
+              History
+            </button>
+            <button class="btn btn-primary" type="button" onclick="showScreen('add-expiration')">
+              + Add Expiration
+            </button>
+          </div>
+        </div>
+      </article>
+
+      <!-- ADD PRODUCT EXPIRATION -->
+      <article class="screen" id="add-expiration">
+        <header class="topbar">
+          <button class="icon-button" type="button" onclick="goBack()">‹</button>
+          <h1>Add Product Expiration</h1>
+          <button class="icon-button" type="button">⋯</button>
+        </header>
+
+        <form class="content" id="addExpirationForm">
+          <p class="eyebrow">01 &nbsp; Input Product Expiration</p>
+          <p class="description">Create a new expiration record and register its batch.</p>
+
+          <div class="field">
+            <label for="product">Product</label>
+            <select class="select" id="product" required>
+              <option value="">Select product</option>
+              <option value="Product A">Product A</option>
+              <option value="Product B">Product B</option>
+              <option value="Product C">Product C</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="expirationDate">Expiration date</label>
+            <input class="input" id="expirationDate" type="date" required>
+          </div>
+
+          <div class="field">
+            <label for="quantity">Quantity</label>
+            <input class="input" id="quantity" type="number" min="1" placeholder="0 units" required>
+          </div>
+
+          <div class="field">
+            <label for="batchNumber">Optional batch name</label>
+            <input class="input" id="batchNumber" type="text" placeholder="e.g. LOT-001">
+          </div>
+
+          <div class="field">
+            <label>Automatic status</label>
+            <span class="status normal">Normal</span>
+          </div>
+
+          <div class="error" id="formError">
+            Complete the product, expiration date, and quantity fields.
+          </div>
+
+          <div class="actions">
+            <button class="btn btn-secondary" type="button" onclick="goBack()">Cancel</button>
+            <button class="btn btn-primary" type="submit">Save</button>
+          </div>
+        </form>
+      </article>
+
+      <!-- BATCH REGISTRATION -->
+      <article class="screen" id="batch-registration">
+        <header class="topbar">
+          <button class="icon-button" type="button" onclick="goBack()">‹</button>
+          <h1>Batch Registration</h1>
+          <button class="icon-button" type="button">⋯</button>
+        </header>
+
+        <div class="content">
+          <p class="eyebrow">Product A &nbsp; • &nbsp; 3 batches</p>
+
+          <div id="batchRegistrationList"></div>
+
+          <div class="actions">
+            <button class="btn btn-secondary" type="button" onclick="showScreen('add-expiration')">
+              + Add Batch
+            </button>
+            <button class="btn btn-primary" type="button" onclick="showScreen('expiration-list')">
+              Save All
+            </button>
+          </div>
+        </div>
+      </article>
+
+      <!-- EDIT DETAILS -->
+      <article class="screen" id="edit-details">
+        <header class="topbar">
+          <button class="icon-button" type="button" onclick="goBack()">‹</button>
+          <h1>Edit Details</h1>
+          <button class="icon-button" type="button">⋯</button>
+        </header>
+
+        <form class="content" id="editForm">
+          <p class="eyebrow">04 &nbsp; Edit Expiration Details</p>
+          <p class="description" id="editProductLabel">Product A · LOT-014</p>
+
+          <input id="editId" type="hidden">
+
+          <div class="field">
+            <label for="editDate">Expiration date</label>
+            <input class="input" id="editDate" type="date" required>
+          </div>
+
+          <div class="field">
+            <label for="editQuantity">Quantity</label>
+            <input class="input" id="editQuantity" type="number" min="0" required>
+          </div>
+
+          <div class="field">
+            <label for="editBatch">Batch name</label>
+            <input class="input" id="editBatch" type="text" required>
+          </div>
+
+          <div class="field">
+            <label>Status</label>
+            <span class="status nearing" id="editStatus">Nearing expiration</span>
+          </div>
+
+          <div class="actions">
+            <button class="btn btn-secondary" type="button" onclick="goBack()">Cancel</button>
+            <button class="btn btn-primary" type="submit">Update</button>
+          </div>
+        </form>
+      </article>
+
+      <!-- UPDATE STOCK -->
+      <article class="screen" id="update-stock">
+        <header class="topbar">
+          <button class="icon-button" type="button" onclick="goBack()">‹</button>
+          <h1>Update Stock</h1>
+          <button class="icon-button" type="button">⋯</button>
+        </header>
+
+        <form class="content" id="stockForm">
+          <p class="eyebrow">05 &nbsp; Update Stock</p>
+
+          <div class="selected-batch">
+            <strong id="stockBatchName">Product A · LOT-014</strong>
+            <span id="stockAvailable">45 units remaining</span>
+          </div>
+
+          <div class="field">
+            <label>Transaction type</label>
+            <div class="radio-group" id="transactionType">
+              <button class="radio-card active" type="button" data-value="Sold">Sold</button>
+              <button class="radio-card" type="button" data-value="Removed">Removed</button>
+              <button class="radio-card" type="button" data-value="Discarded">Discarded</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="stockQuantity">Quantity</label>
+            <input class="input" id="stockQuantity" type="number" min="1" placeholder="0 units" required>
+          </div>
+
+          <div class="field">
+            <label for="stockNotes">Notes</label>
+            <textarea class="textarea" id="stockNotes" placeholder="Optional notes"></textarea>
+          </div>
+
+          <input id="stockId" type="hidden">
+
+          <div class="actions">
+            <button class="btn btn-secondary" type="button" onclick="goBack()">Cancel</button>
+            <button class="btn btn-primary" type="submit">Update Stock</button>
+          </div>
+        </form>
+      </article>
+
+      <!-- EXPIRATION HISTORY -->
+      <article class="screen" id="history">
+        <header class="topbar">
+          <button class="icon-button" type="button" onclick="goBack()">‹</button>
+          <h1>Expiration History</h1>
+          <button class="icon-button" type="button">⋯</button>
+        </header>
+
+        <div class="content">
+          <p class="eyebrow">08 &nbsp; Expiration History</p>
+
+          <div class="input-row">
+            <div class="field">
+              <label for="historyFrom">Date range</label>
+              <input class="input" id="historyFrom" type="date">
+            </div>
+
+            <div class="field">
+              <label for="historyTo">&nbsp;</label>
+              <input class="input" id="historyTo" type="date">
+            </div>
+          </div>
+
+          <div id="historyItems"></div>
+        </div>
+      </article>
+
+      <!-- PRODUCT DETAIL + BATCHES -->
+      <article class="screen" id="product-details">
+        <header class="topbar">
+          <button class="icon-button" type="button" onclick="goBack()">‹</button>
+          <h1>Product Detail + Batches</h1>
+          <button class="icon-button" type="button">⋯</button>
+        </header>
+
+        <div class="content">
+          <p class="eyebrow">07 &nbsp; Product Detail View</p>
+
+          <div class="summary">
+            <h2>Product A</h2>
+            <p id="totalQuantity">Total quantity: 0 units</p>
+          </div>
+
+          <h3 class="section-heading">Batch overview</h3>
+          <div id="productBatchList"></div>
+
+          <div class="actions">
+            <button class="btn btn-primary btn-full" type="button" onclick="showScreen('add-expiration')">
+              + Add Batch
+            </button>
+          </div>
+        </div>
+      </article>
+
+      <nav class="bottom-nav">
+        <button class="nav-item" type="button" onclick="showScreen('expiration-list')">
+          <span class="nav-icon">⌂</span>
+          Home
+        </button>
+
+        <button class="nav-item" type="button" onclick="showScreen('product-details')">
+          <span class="nav-icon">▣</span>
+          Products
+        </button>
+
+        <button class="nav-item active" type="button" onclick="showScreen('expiration-list')">
+          <span class="nav-icon">◇</span>
+          Expiration
+        </button>
+
+        <button class="nav-item" type="button" onclick="showScreen('batch-registration')">
+          <span class="nav-icon">▤</span>
+          Reports
+        </button>
+
+        <button class="nav-item" type="button">
+          <span class="nav-icon">•••</span>
+          More
+        </button>
+      </nav>
+
+      <div class="toast" id="toast"></div>
+    </section>
+  </main>
+
+  <script>
+    const records = [
+      {
+        id: 1,
+        product: "Product A",
+        batch: "LOT-001",
+        date: "2026-11-30",
+        quantity: 120,
+        status: "Normal"
+      },
+      {
+        id: 2,
+        product: "Product A",
+        batch: "LOT-014",
+        date: "2026-11-15",
+        quantity: 45,
+        status: "Nearing"
+      },
+      {
+        id: 3,
+        product: "Product A",
+        batch: "LOT-021",
+        date: "2026-10-25",
+        quantity: 17,
+        status: "Expired"
+      }
+    ];
+
+    const historyRecords = [
+      {
+        date: "2026-11-04",
+        time: "10:34 AM",
+        product: "Product A",
+        batch: "LOT-021",
+        quantity: "15 units",
+        status: "Expired"
+      },
+      {
+        date: "2026-11-03",
+        time: "04:42 PM",
+        product: "Product B",
+        batch: "LOT-014",
+        quantity: "6 units",
+        status: "Discarded"
+      },
+      {
+        date: "2026-11-02",
+        time: "09:16 AM",
+        product: "Product A",
+        batch: "LOT-001",
+        quantity: "12 units",
+        status: "Sold"
+      }
+    ];
+
+    let currentScreen = "expiration-list";
+    let screenHistory = [];
+    let activeFilter = "All";
+    let selectedTransaction = "Sold";
+
+    function statusClass(status) {
+      return status.toLowerCase().replace(/\s+/g, "-");
+    }
+
+    function statusLabel(status) {
+      return status === "Nearing" ? "Nearing" : status;
+    }
+
+    function formatDate(value) {
+      if (!value) return "";
+      const date = new Date(value + "T00:00:00");
+      return date.toLocaleDateString("en-US", {
+        month: "short",
+        day: "2-digit",
+        year: "numeric"
+      });
+    }
+
+    function showScreen(id, savePrevious = true) {
+      if (savePrevious && currentScreen !== id) {
+        screenHistory.push(currentScreen);
+      }
+
+      document.querySelectorAll(".screen").forEach((screen) => {
+        screen.classList.remove("active");
+      });
+
+      const nextScreen = document.getElementById(id);
+      if (!nextScreen) return;
+
+      nextScreen.classList.add("active");
+      currentScreen = id;
+
+      if (id === "expiration-list") renderExpirationList();
+      if (id === "batch-registration") renderBatchRegistration();
+      if (id === "product-details") renderProductDetails();
+      if (id === "history") renderHistory();
+
+      window.scrollTo(0, 0);
+    }
+
+    function goBack() {
+      const previous = screenHistory.pop() || "expiration-list";
+      showScreen(previous, false);
+    }
+
+    function showToast(message) {
+      const toast = document.getElementById("toast");
+      toast.textContent = message;
+      toast.style.display = "block";
+
+      window.clearTimeout(showToast.timer);
+      showToast.timer = window.setTimeout(() => {
+        toast.style.display = "none";
+      }, 2200);
+    }
+
+    function renderExpirationList() {
+      const target = document.getElementById("expirationItems");
+      const search = document.getElementById("searchInput").value.trim().toLowerCase();
+
+      const filtered = records.filter((record) => {
+        const matchesFilter =
+          activeFilter === "All" || record.status === activeFilter;
+
+        const matchesSearch =
+          record.product.toLowerCase().includes(search) ||
+          record.batch.toLowerCase().includes(search);
+
+        return matchesFilter && matchesSearch;
+      });
+
+      if (!filtered.length) {
+        target.innerHTML = '<div class="empty">No expiration records found.</div>';
+        return;
+      }
+
+      target.innerHTML = filtered.map((record) => `
+        <div class="list-item">
+          <div class="row-between">
+            <div>
+              <p class="item-title">${record.product} / ${record.batch}</p>
+              <p class="item-meta">${formatDate(record.date)} · ${record.quantity} units</p>
+            </div>
+
+            <span class="status ${statusClass(record.status)}">
+              ${statusLabel(record.status)}
+            </span>
+          </div>
+
+          <div class="actions" style="margin-top: 10px;">
+            <button
+              class="btn btn-secondary"
+              type="button"
+              onclick="openStock(${record.id})"
+            >
+              Update Stock
+            </button>
+
+            <button
+              class="btn btn-secondary"
+              type="button"
+              onclick="openEdit(${record.id})"
+            >
+              Edit
+            </button>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function renderBatchRegistration() {
+      const target = document.getElementById("batchRegistrationList");
+
+      target.innerHTML = records.map((record) => `
+        <div class="batch-card">
+          <div class="row-between">
+            <div>
+              <p class="item-title">${record.batch}</p>
+              <p class="item-meta">${formatDate(record.date)} · ${record.quantity} units</p>
+            </div>
+
+            <span class="status ${statusClass(record.status)}">
+              ${statusLabel(record.status)}
+            </span>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function renderProductDetails() {
+      const target = document.getElementById("productBatchList");
+      const total = records.reduce((sum, record) => sum + Number(record.quantity), 0);
+
+      document.getElementById("totalQuantity").textContent =
+        `Total quantity: ${total} units`;
+
+      target.innerHTML = records.map((record) => `
+        <div class="batch-card">
+          <div class="row-between">
+            <div>
+              <p class="item-title">${record.batch}</p>
+              <p class="item-meta">${formatDate(record.date)}</p>
+              <p class="item-meta">${record.quantity} units</p>
+            </div>
+
+            <span class="status ${statusClass(record.status)}">
+              ${statusLabel(record.status)}
+            </span>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function renderHistory() {
+      const target = document.getElementById("historyItems");
+
+      target.innerHTML = historyRecords.map((record) => `
+        <div class="history-item">
+          <div class="history-grid">
+            <div class="date">
+              ${formatDate(record.date)}<br>
+              ${record.time}
+            </div>
+
+            <div>
+              <p class="item-title">${record.product}</p>
+              <p class="item-meta">${record.batch} · ${record.quantity}</p>
+            </div>
+
+            <span class="status ${statusClass(record.status)}">
+              ${record.status}
+            </span>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function openEdit(id) {
+      const record = records.find((item) => item.id === id);
+      if (!record) return;
+
+      document.getElementById("editId").value = record.id;
+      document.getElementById("editDate").value = record.date;
+      document.getElementById("editQuantity").value = record.quantity;
+      document.getElementById("editBatch").value = record.batch;
+      document.getElementById("editProductLabel").textContent =
+        `${record.product} · ${record.batch}`;
+
+      const editStatus = document.getElementById("editStatus");
+      editStatus.className = `status ${statusClass(record.status)}`;
+      editStatus.textContent = statusLabel(record.status);
+
+      showScreen("edit-details");
+    }
+
+    function openStock(id) {
+      const record = records.find((item) => item.id === id);
+      if (!record) return;
+
+      document.getElementById("stockId").value = record.id;
+      document.getElementById("stockBatchName").textContent =
+        `${record.product} · ${record.batch}`;
+      document.getElementById("stockAvailable").textContent =
+        `${record.quantity} units remaining`;
+      document.getElementById("stockQuantity").value = "";
+      document.getElementById("stockNotes").value = "";
+
+      showScreen("update-stock");
+    }
+
+    document.querySelectorAll(".filter").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".filter").forEach((item) => {
+          item.classList.remove("active");
+        });
+
+        button.classList.add("active");
+        activeFilter = button.dataset.filter;
+        renderExpirationList();
+      });
+    });
+
+    document.querySelectorAll(".radio-card").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".radio-card").forEach((item) => {
+          item.classList.remove("active");
+        });
+
+        button.classList.add("active");
+        selectedTransaction = button.dataset.value;
+      });
+    });
+
+    document.getElementById("addExpirationForm").addEventListener("submit", (event) => {
+      event.preventDefault();
+
+      const product = document.getElementById("product").value;
+      const date = document.getElementById("expirationDate").value;
+      const quantity = Number(document.getElementById("quantity").value);
+      const batchInput = document.getElementById("batchNumber").value.trim();
+      const error = document.getElementById("formError");
+
+      if (!product || !date || quantity < 1) {
+        error.style.display = "block";
+        return;
+      }
+
+      error.style.display = "none";
+
+      const today = new Date();
+      const expiration = new Date(date + "T00:00:00");
+      const days = Math.ceil((expiration - today) / 86400000);
+
+      let status = "Normal";
+      if (days < 0) status = "Expired";
+      else if (days <= 30) status = "Nearing";
+
+      const batch =
+        batchInput || `LOT-${String(records.length + 1).padStart(3, "0")}`;
+
+      records.push({
+        id: Date.now(),
+        product,
+        batch,
+        date,
+        quantity,
+        status
+      });
+
+      event.target.reset();
+      renderBatchRegistration();
+      showToast("Expiration record saved.");
+      showScreen("batch-registration");
+    });
+
+    document.getElementById("editForm").addEventListener("submit", (event) => {
+      event.preventDefault();
+
+      const id = Number(document.getElementById("editId").value);
+      const record = records.find((item) => item.id === id);
+      if (!record) return;
+
+      record.date = document.getElementById("editDate").value;
+      record.quantity = Number(document.getElementById("editQuantity").value);
+      record.batch = document.getElementById("editBatch").value.trim();
+
+      const today = new Date();
+      const expiration = new Date(record.date + "T00:00:00");
+      const days = Math.ceil((expiration - today) / 86400000);
+
+      record.status = days < 0 ? "Expired" : days <= 30 ? "Nearing" : "Normal";
+
+      renderExpirationList();
+      showToast("Expiration details updated.");
+      showScreen("expiration-list");
+    });
+
+    document.getElementById("stockForm").addEventListener("submit", (event) => {
+      event.preventDefault();
+
+      const id = Number(document.getElementById("stockId").value);
+      const quantity = Number(document.getElementById("stockQuantity").value);
+      const notes = document.getElementById("stockNotes").value.trim();
+      const record = records.find((item) => item.id === id);
+
+      if (!record || quantity < 1) return;
+
+      if (quantity > record.quantity) {
+        showToast("Quantity exceeds the available stock.");
+        return;
+      }
+
+      record.quantity -= quantity;
+
+      historyRecords.unshift({
+        date: new Date().toISOString().slice(0, 10),
+        time: new Date().toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit"
+        }),
+        product: record.product,
+        batch: record.batch,
+        quantity: `${quantity} units${notes ? " · " + notes : ""}`,
+        status: selectedTransaction
+      });
+
+      renderExpirationList();
+      renderHistory();
+      renderProductDetails();
+
+      showToast("Stock and transaction history updated.");
+      showScreen("history");
+    });
+
+    renderExpirationList();
+    renderBatchRegistration();
+    renderProductDetails();
+    renderHistory();
+  </script>
+</body>
+</html>

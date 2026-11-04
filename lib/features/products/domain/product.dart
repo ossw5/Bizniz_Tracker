@@ -19,6 +19,9 @@ class ProductModel extends HiveObject {
   @HiveField(6)
   final int minStock; // minimum stock threshold
 
+  bool get isLowStock =>
+      quantity <= 0 || (minStock > 0 && quantity <= minStock);
+
   ProductModel({
     required this.id,
     required this.name,

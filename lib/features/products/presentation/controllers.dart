@@ -29,7 +29,7 @@ class ProductController {
   ProductController({required this.repository});
 
   Future<void> loadProducts() async {
-    state = state.copyWith(loading: true, error: null);
+    state = ProductState(loading: true, products: state.products);
     final res = await repository.getAllProducts();
     res.fold(
       (Failure f) => state = state.copyWith(loading: false, error: f.message),
@@ -40,25 +40,22 @@ class ProductController {
 
   Future<void> addProduct(ProductModel product) async {
     final res = await repository.addProduct(product);
-    res.fold(
-      (f) => state = state.copyWith(error: f.message),
-      (p) => loadProducts(),
-    );
+    await res.fold<Future<void>>((f) async {
+      state = state.copyWith(error: f.message);
+    }, (_) => loadProducts());
   }
 
   Future<void> updateProduct(ProductModel product) async {
     final res = await repository.updateProduct(product);
-    res.fold(
-      (f) => state = state.copyWith(error: f.message),
-      (p) => loadProducts(),
-    );
+    await res.fold<Future<void>>((f) async {
+      state = state.copyWith(error: f.message);
+    }, (_) => loadProducts());
   }
 
   Future<void> deleteProduct(String id) async {
     final res = await repository.deleteProduct(id);
-    res.fold(
-      (f) => state = state.copyWith(error: f.message),
-      (_) => loadProducts(),
-    );
+    await res.fold<Future<void>>((f) async {
+      state = state.copyWith(error: f.message);
+    }, (_) => loadProducts());
   }
 }

@@ -10,7 +10,7 @@ import 'package:bizniz_tracker/features/sales/presentation/home_screen.dart';
 import 'package:bizniz_tracker/core/formatters.dart';
 import 'package:bizniz_tracker/core/theme.dart';
 import 'package:bizniz_tracker/core/csv_export.dart';
-import 'package:bizniz_tracker/features/sales/data/sale_repository_impl.dart';
+import 'package:bizniz_tracker/features/sales/domain/sale_repository.dart';
 import 'package:bizniz_tracker/features/sales/presentation/add_sale_screen.dart';
 import 'package:bizniz_tracker/features/sales/presentation/sales_summary_screen.dart';
 
@@ -117,7 +117,7 @@ class _ProductHomePageState extends State<ProductHomePage> {
               saleRepository: saleRepository,
               onBack: _closeInventoryAlerts,
             )
-          : _InventoryScreen(
+          : InventoryManagementScreen(
               productController: _productController,
               onRefresh: _refresh,
               onOpenInventoryAlerts: _openInventoryAlerts,
@@ -158,22 +158,23 @@ class _ProductHomePageState extends State<ProductHomePage> {
 }
 
 /// Inventory management screen with categories and editable low-stock items
-class _InventoryScreen extends StatefulWidget {
+class InventoryManagementScreen extends StatefulWidget {
   final ProductController productController;
   final Function() onRefresh;
   final VoidCallback onOpenInventoryAlerts;
 
-  const _InventoryScreen({
+  const InventoryManagementScreen({
+    super.key,
     required this.productController,
     required this.onRefresh,
     required this.onOpenInventoryAlerts,
   });
 
   @override
-  State<_InventoryScreen> createState() => _InventoryScreenState();
+  State<InventoryManagementScreen> createState() => _InventoryScreenState();
 }
 
-class _InventoryScreenState extends State<_InventoryScreen> {
+class _InventoryScreenState extends State<InventoryManagementScreen> {
   String? _selectedCategory;
 
   @override
@@ -205,12 +206,15 @@ class _InventoryScreenState extends State<_InventoryScreen> {
               style: TextButton.styleFrom(
                 backgroundColor: Theme.of(context).colorScheme.primary,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              child: const Text('INVENTORY ALERT'),
+              child: const Text('Inventory Alerts'),
             ),
           ),
           IconButton(
@@ -297,9 +301,10 @@ class _InventoryScreenState extends State<_InventoryScreen> {
                                   child: ChoiceChip(
                                     label: Text(c),
                                     selected: _selectedCategory == c,
-                                    selectedColor: Theme.of(
-                                      context,
-                                    ).colorScheme.primary.withValues(alpha: 0.12),
+                                    selectedColor: Theme.of(context)
+                                        .colorScheme
+                                        .primary
+                                        .withValues(alpha: 0.12),
                                     labelStyle: Theme.of(
                                       context,
                                     ).textTheme.bodyMedium,
@@ -345,8 +350,7 @@ class _InventoryScreenState extends State<_InventoryScreen> {
                           itemCount: products.length,
                           itemBuilder: (context, index) {
                             final product = products[index];
-                            final isLowStock =
-                                product.quantity < product.minStock;
+                            final isLowStock = product.isLowStock;
                             return ListTile(
                               title: Text(
                                 product.name,
@@ -531,13 +535,13 @@ class _InventoryScreenState extends State<_InventoryScreen> {
 }
 
 class InventoryAlertsScreen extends StatefulWidget {
-  final ProductController productController;
-  final SaleRepositoryImpl saleRepository;
+  final ProductController? productController;
+  final SaleRepository? saleRepository;
   final VoidCallback onBack;
 
   const InventoryAlertsScreen({
-    required this.productController,
-    required this.saleRepository,
+    this.productController,
+    this.saleRepository,
     required this.onBack,
     super.key,
   });
@@ -557,16 +561,17 @@ class _InventoryAlertsScreenState extends State<InventoryAlertsScreen> {
   int _selectedTab = 0;
   String _selectedPeriod = 'THIS WEEK';
   String _searchTerm = '';
+  late Future<List<Sale>> _salesFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _salesFuture =
+        widget.saleRepository?.getAllSales() ?? Future<List<Sale>>.value([]);
+  }
 
   List<ProductModel> _getLowStockProducts(List<ProductModel> products) {
-    return products
-        .where(
-          (product) =>
-              product.quantity > 0 &&
-              product.quantity <= product.minStock &&
-              product.minStock > 0,
-        )
-        .toList();
+    return products.where((product) => product.isLowStock).toList();
   }
 
   List<ProductModel> _filterProductsByName(
@@ -611,7 +616,11 @@ class _InventoryAlertsScreenState extends State<InventoryAlertsScreen> {
     );
   }
 
-  Widget _buildProductCard(ProductModel product, {String? subtitle, String? status}) {
+  Widget _buildProductCard(
+    ProductModel product, {
+    String? subtitle,
+    String? status,
+  }) {
     final theme = Theme.of(context);
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -644,18 +653,16 @@ class _InventoryAlertsScreenState extends State<InventoryAlertsScreen> {
                     ),
                   ),
                   if (product.category.trim().isNotEmpty)
-                    Text(
-                      product.category,
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  if (subtitle != null) Text(subtitle, style: theme.textTheme.bodySmall),
+                    Text(product.category, style: theme.textTheme.bodySmall),
+                  if (subtitle != null)
+                    Text(subtitle, style: theme.textTheme.bodySmall),
                   if (status != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 6),
                       child: Text(
                         status,
                         style: theme.textTheme.labelLarge?.copyWith(
-                          color: product.quantity == 0
+                          color: product.quantity <= 0
                               ? Colors.red
                               : Colors.orange,
                           fontWeight: FontWeight.w700,
@@ -701,8 +708,12 @@ class _InventoryAlertsScreenState extends State<InventoryAlertsScreen> {
           _buildAlertBanner(
             color: Colors.red,
             icon: Icons.warning_amber_rounded,
-            title: '${lowStockProducts.length} products are running low on stock',
-            trailing: const Icon(Icons.warning_amber_rounded, color: Colors.red),
+            title:
+                '${lowStockProducts.length} products are running low on stock',
+            trailing: const Icon(
+              Icons.warning_amber_rounded,
+              color: Colors.red,
+            ),
           ),
           const SizedBox(height: 12),
           TextField(
@@ -716,7 +727,12 @@ class _InventoryAlertsScreenState extends State<InventoryAlertsScreen> {
           const SizedBox(height: 16),
           Expanded(
             child: lowStockProducts.isEmpty
-                ? const Center(child: Text('No low-stock products found.'))
+                ? const Center(
+                    child: Text(
+                      'No low-stock products found. Add products and set a minimum stock level to see alerts.',
+                      textAlign: TextAlign.center,
+                    ),
+                  )
                 : ListView(
                     children: lowStockProducts
                         .map(
@@ -725,7 +741,7 @@ class _InventoryAlertsScreenState extends State<InventoryAlertsScreen> {
                             subtitle: product.category.isEmpty
                                 ? 'Category not set'
                                 : product.category,
-                            status: product.quantity == 0
+                            status: product.quantity <= 0
                                 ? 'OUT OF STOCK'
                                 : 'LOW STOCK',
                           ),
@@ -751,7 +767,10 @@ class _InventoryAlertsScreenState extends State<InventoryAlertsScreen> {
             color: Colors.amber,
             icon: Icons.calendar_today_rounded,
             title: '0 products are expiring soon or already expired',
-            trailing: const Icon(Icons.info_outline_rounded, color: Colors.amber),
+            trailing: const Icon(
+              Icons.info_outline_rounded,
+              color: Colors.amber,
+            ),
           ),
           const SizedBox(height: 16),
           Expanded(
@@ -774,7 +793,7 @@ class _InventoryAlertsScreenState extends State<InventoryAlertsScreen> {
   }
 
   Widget _buildSlowMovingTab(List<ProductModel> products) {
-    final salesFuture = widget.saleRepository.getAllSales();
+    final salesFuture = _salesFuture;
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -791,10 +810,14 @@ class _InventoryAlertsScreenState extends State<InventoryAlertsScreen> {
                             .where((sale) => sale.productId == product.id)
                             .toList();
                         if (matchingSales.isEmpty) return false;
-                        final lastDate = matchingSales.reduce(
-                          (a, b) => a.saleDate.isAfter(b.saleDate) ? a : b,
-                        ).saleDate;
-                        final daysSince = DateTime.now().difference(lastDate).inDays;
+                        final lastDate = matchingSales
+                            .reduce(
+                              (a, b) => a.saleDate.isAfter(b.saleDate) ? a : b,
+                            )
+                            .saleDate;
+                        final daysSince = DateTime.now()
+                            .difference(lastDate)
+                            .inDays;
                         return daysSince >= 30;
                       }).toList(),
                       _searchTerm,
@@ -805,7 +828,10 @@ class _InventoryAlertsScreenState extends State<InventoryAlertsScreen> {
                 color: Colors.purple,
                 icon: Icons.schedule_rounded,
                 title: '$count products have not been sold for a while',
-                trailing: const Icon(Icons.schedule_rounded, color: Colors.purple),
+                trailing: const Icon(
+                  Icons.schedule_rounded,
+                  color: Colors.purple,
+                ),
               );
             },
           ),
@@ -832,35 +858,43 @@ class _InventoryAlertsScreenState extends State<InventoryAlertsScreen> {
 
                 final salesList = snapshot.data!;
                 final items = products.where((product) {
-                  final matchingSales = salesList.where((sale) => sale.productId == product.id).toList();
+                  final matchingSales = salesList
+                      .where((sale) => sale.productId == product.id)
+                      .toList();
                   if (matchingSales.isEmpty) return false;
-                  final lastDate = matchingSales.reduce(
-                    (a, b) => a.saleDate.isAfter(b.saleDate) ? a : b,
-                  ).saleDate;
+                  final lastDate = matchingSales
+                      .reduce((a, b) => a.saleDate.isAfter(b.saleDate) ? a : b)
+                      .saleDate;
                   final daysSince = DateTime.now().difference(lastDate).inDays;
                   return daysSince >= 30;
                 }).toList();
 
                 final displayed = _filterProductsByName(items, _searchTerm);
                 return displayed.isEmpty
-                    ? const Center(child: Text('No slow-moving products found.'))
+                    ? const Center(
+                        child: Text('No slow-moving products found.'),
+                      )
                     : ListView(
-                        children: displayed
-                            .map((product) {
-                              final matchingSales = salesList
-                                  .where((sale) => sale.productId == product.id)
-                                  .toList();
-                              final lastDate = matchingSales.reduce(
-                                (a, b) => a.saleDate.isAfter(b.saleDate) ? a : b,
-                              ).saleDate;
-                              final daysSince = DateTime.now().difference(lastDate).inDays;
-                              return _buildProductCard(
-                                product,
-                                subtitle: 'Last sold: ${lastDate.toLocal().toString().split(' ')[0]}',
-                                status: 'SLOW-MOVING • $daysSince DAYS',
-                              );
-                            })
-                            .toList(),
+                        children: displayed.map((product) {
+                          final matchingSales = salesList
+                              .where((sale) => sale.productId == product.id)
+                              .toList();
+                          final lastDate = matchingSales
+                              .reduce(
+                                (a, b) =>
+                                    a.saleDate.isAfter(b.saleDate) ? a : b,
+                              )
+                              .saleDate;
+                          final daysSince = DateTime.now()
+                              .difference(lastDate)
+                              .inDays;
+                          return _buildProductCard(
+                            product,
+                            subtitle:
+                                'Last sold: ${lastDate.toLocal().toString().split(' ')[0]}',
+                            status: 'SLOW-MOVING • $daysSince DAYS',
+                          );
+                        }).toList(),
                       );
               },
             ),
@@ -871,23 +905,19 @@ class _InventoryAlertsScreenState extends State<InventoryAlertsScreen> {
   }
 
   Widget _buildTopSoldTab(List<ProductModel> products) {
-    final periodMap = {
-      'THIS DAY': 1,
-      'THIS WEEK': 7,
-      'THIS MONTH': 30,
-    };
+    final periodMap = {'THIS DAY': 1, 'THIS WEEK': 7, 'THIS MONTH': 30};
     final selectedWindow = periodMap[_selectedPeriod] ?? 7;
 
-    final salesFuture = widget.saleRepository.getAllSales();
+    final salesFuture = _salesFuture;
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
           Text(
             'Your top selling products in this period.',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 12),
           Align(
@@ -895,7 +925,10 @@ class _InventoryAlertsScreenState extends State<InventoryAlertsScreen> {
             child: DropdownButton<String>(
               value: _selectedPeriod,
               items: periodMap.keys
-                  .map((period) => DropdownMenuItem(value: period, child: Text(period)))
+                  .map(
+                    (period) =>
+                        DropdownMenuItem(value: period, child: Text(period)),
+                  )
                   .toList(),
               onChanged: (value) {
                 if (value != null) {
@@ -918,7 +951,9 @@ class _InventoryAlertsScreenState extends State<InventoryAlertsScreen> {
 
                 final sales = snapshot.data!;
                 final byProduct = <String, int>{};
-                final threshold = DateTime.now().subtract(Duration(days: selectedWindow));
+                final threshold = DateTime.now().subtract(
+                  Duration(days: selectedWindow),
+                );
                 for (final sale in sales) {
                   if (sale.saleDate.isBefore(threshold)) continue;
                   byProduct[sale.productId] =
@@ -929,7 +964,9 @@ class _InventoryAlertsScreenState extends State<InventoryAlertsScreen> {
                   ..sort((a, b) => b.value.compareTo(a.value));
 
                 if (ordered.isEmpty) {
-                  return const Center(child: Text('No sales in the selected period.'));
+                  return const Center(
+                    child: Text('No sales in the selected period.'),
+                  );
                 }
 
                 final matches = ordered.map((entry) {
@@ -981,18 +1018,24 @@ class _InventoryAlertsScreenState extends State<InventoryAlertsScreen> {
             color: Colors.green,
             icon: Icons.lightbulb_outline_rounded,
             title: 'Smart suggestions',
-            trailing: const Icon(Icons.auto_awesome_rounded, color: Colors.green),
+            trailing: const Icon(
+              Icons.auto_awesome_rounded,
+              color: Colors.green,
+            ),
           ),
           const SizedBox(height: 16),
           Expanded(
             child: suggestions.isEmpty
-                ? const Center(child: Text('No suggestions available right now.'))
+                ? const Center(
+                    child: Text('No suggestions available right now.'),
+                  )
                 : ListView(
                     children: suggestions
                         .map(
                           (product) => _buildProductCard(
                             product,
-                            subtitle: 'Restock recommended before level falls below minimum stock.',
+                            subtitle:
+                                'Restock recommended before level falls below minimum stock.',
                             status: 'REORDER SUGGESTED',
                           ),
                         )
@@ -1006,7 +1049,8 @@ class _InventoryAlertsScreenState extends State<InventoryAlertsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final products = widget.productController.state.products;
+    final state = widget.productController?.state;
+    final products = state?.products ?? const <ProductModel>[];
     final screens = [
       _buildLowStockTab(products),
       _buildExpirationTab(products),
@@ -1025,35 +1069,85 @@ class _InventoryAlertsScreenState extends State<InventoryAlertsScreen> {
         centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.notifications_none_rounded),
-            onPressed: () {},
+            tooltip: 'Add product',
+            icon: const Icon(Icons.add_box_outlined),
+            onPressed: widget.productController == null
+                ? null
+                : () async {
+                    await showDialog<void>(
+                      context: context,
+                      builder: (dialogContext) => _ProductFormDialog(
+                        onSave: (product) async {
+                          await widget.productController!.addProduct(product);
+                          if (!mounted || !dialogContext.mounted) return;
+                          Navigator.of(dialogContext).pop();
+                          final error = widget.productController!.state.error;
+                          if (error != null) {
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              SnackBar(
+                                content: Text('Could not save product: $error'),
+                              ),
+                            );
+                            return;
+                          }
+                          setState(() {});
+                          ScaffoldMessenger.of(this.context).showSnackBar(
+                            const SnackBar(content: Text('Product saved.')),
+                          );
+                        },
+                      ),
+                    );
+                  },
+          ),
+          IconButton(
+            tooltip: 'Refresh inventory alerts',
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: widget.productController == null
+                ? null
+                : () async {
+                    final productController = widget.productController!;
+                    await productController.loadProducts();
+                    if (!mounted) return;
+                    setState(() {
+                      _salesFuture =
+                          widget.saleRepository?.getAllSales() ??
+                          Future<List<Sale>>.value([]);
+                    });
+                  },
           ),
         ],
       ),
-      body: DefaultTabController(
-        length: _tabs.length,
-        child: Column(
-          children: [
-            TabBar(
-              isScrollable: true,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.black87,
-              indicator: BoxDecoration(
-                color: Colors.green,
-                borderRadius: BorderRadius.circular(12),
+      body: state?.error != null
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'Could not load inventory: ${state!.error}',
+                  textAlign: TextAlign.center,
+                ),
               ),
-              tabs: _tabs.map((tab) => Tab(text: tab)).toList(),
-              onTap: (index) => setState(() => _selectedTab = index),
-            ),
-            Expanded(
-              child: IndexedStack(
-                index: _selectedTab,
-                children: screens,
+            )
+          : DefaultTabController(
+              length: _tabs.length,
+              child: Column(
+                children: [
+                  TabBar(
+                    isScrollable: true,
+                    labelColor: Colors.white,
+                    unselectedLabelColor: Colors.black87,
+                    indicator: BoxDecoration(
+                      color: Colors.green,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    tabs: _tabs.map((tab) => Tab(text: tab)).toList(),
+                    onTap: (index) => setState(() => _selectedTab = index),
+                  ),
+                  Expanded(
+                    child: IndexedStack(index: _selectedTab, children: screens),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -1170,17 +1264,58 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
         ),
         ElevatedButton(
           onPressed: () {
+            final name = _nameController.text.trim();
+            final quantity = int.tryParse(_quantityController.text);
+            final costPrice = double.tryParse(_costPriceController.text);
+            final sellingPrice = double.tryParse(_sellingPriceController.text);
+            final minStock = int.tryParse(_minStockController.text);
+
+            if (name.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Enter a product name.')),
+              );
+              return;
+            }
+            if (quantity == null || quantity < 0) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Enter a valid non-negative quantity.'),
+                ),
+              );
+              return;
+            }
+            if (costPrice == null ||
+                !costPrice.isFinite ||
+                costPrice < 0 ||
+                sellingPrice == null ||
+                !sellingPrice.isFinite ||
+                sellingPrice < 0) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Enter valid non-negative prices.'),
+                ),
+              );
+              return;
+            }
+            if (minStock == null || minStock < 0) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Enter a valid non-negative minimum stock.'),
+                ),
+              );
+              return;
+            }
+
             final product = ProductModel(
-              id: _idController.text.isEmpty
+              id: _idController.text.trim().isEmpty
                   ? DateTime.now().millisecondsSinceEpoch.toString()
-                  : _idController.text,
-              name: _nameController.text,
-              quantity: int.tryParse(_quantityController.text) ?? 0,
-              costPrice: double.tryParse(_costPriceController.text) ?? 0.0,
-              sellingPrice:
-                  double.tryParse(_sellingPriceController.text) ?? 0.0,
-              category: _categoryController.text,
-              minStock: int.tryParse(_minStockController.text) ?? 0,
+                  : _idController.text.trim(),
+              name: name,
+              quantity: quantity,
+              costPrice: costPrice,
+              sellingPrice: sellingPrice,
+              category: _categoryController.text.trim(),
+              minStock: minStock,
             );
             widget.onSave(product);
           },

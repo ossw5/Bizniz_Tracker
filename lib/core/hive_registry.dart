@@ -1,5 +1,6 @@
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:bizniz_tracker/features/products/domain/product.dart';
+import 'package:bizniz_tracker/features/product_and_inventory_management/models/expiration_model.dart';
 import 'package:bizniz_tracker/features/sales/domain/sale.dart';
 
 Future<void> registerHiveAdapters() async {
@@ -12,6 +13,9 @@ Future<void> registerHiveAdapters() async {
   }
   if (!Hive.isAdapterRegistered(SaleAdapter().typeId)) {
     Hive.registerAdapter(SaleAdapter());
+  }
+  if (!Hive.isAdapterRegistered(ExpirationBatchAdapter().typeId)) {
+    Hive.registerAdapter(ExpirationBatchAdapter());
   }
   // open boxes if you like (or open them in repositories)
   // await Hive.openBox<ProductModel>('products_box');

@@ -12,12 +12,14 @@ class InventoryAlertsScreen extends StatefulWidget {
   final ProductController? productController;
   final SaleRepository? saleRepository;
   final VoidCallback onBack;
+  final int initialTabIndex;
 
   const InventoryAlertsScreen({
     super.key,
     required this.onBack,
     this.productController,
     this.saleRepository,
+    this.initialTabIndex = 0,
   });
 
   @override
@@ -52,7 +54,11 @@ class _InventoryAlertsScreenState extends State<InventoryAlertsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _tabs.length, vsync: this);
+    _tabController = TabController(
+      length: _tabs.length,
+      initialIndex: widget.initialTabIndex,
+      vsync: this,
+    );
     _salesFuture = _loadSales();
   }
 

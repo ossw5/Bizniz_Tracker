@@ -16,17 +16,20 @@ A Flutter-based offline inventory and sales tracking app for small businesses. T
 - ✅ Product Repository (add, update, delete, getAll, getById)
 - ✅ Inventory List Screen with product display
 
-### 2. **Sales Logging Infrastructure**
+### 2. **Sales Logging and Sales in One**
 - ✅ Sale entity with Hive support (typeId: 1)
 - ✅ Sale Repository with date range queries
 - ✅ Sales data persistence in Hive
 - ✅ Automatic calculation of revenue (qty × price)
 - ✅ Query sales by date, date range, or product ID
+- ✅ Product selection, search, barcode scanning/manual entry, and cart
+- ✅ Payment validation, receipt generation, and inventory deduction
+- ✅ Saved transaction history with search and daily/weekly/monthly summaries
 
 ### 3. **Home Screen / Dashboard**
 - ✅ Daily summary cards: Total revenue, profit, sales count
 - ✅ Low stock alerts highlighting items below minimum
-- ✅ Quick navigation via bottom navigation bar (4 screens)
+- ✅ Quick navigation via bottom navigation bar (5 destinations)
 - ✅ FutureBuilder for async data loading
 
 ### 4. **Architecture & Providers**
@@ -39,47 +42,9 @@ A Flutter-based offline inventory and sales tracking app for small businesses. T
 
 ## 🚧 In Progress / Next Steps
 
-### 3. **Add Sale Screen** (Priority: HIGH)
-**Location:** `lib/features/sales/presentation/add_sale_screen.dart`
-
-**Requirements:**
-- Product dropdown selector (search/filter by name)
-- Quantity input field
-- Auto-filled selling price (editable)
-- Confirm Sale button → triggers:
-  - Create Sale record in Hive
-  - Reduce product quantity in inventory
-  - Return to Home Screen with refreshed summary
-- Cancel button → back to Home
-
-**Implementation Notes:**
-- Use `productController.state.products` for dropdown
-- Create `SalesController.recordSale()` method
-- Update inventory: `product.quantity -= quantitySold`
-- Emit refresh event to update Home Screen summary
-
----
-
-### 4. **Sales Summary Screen** (Priority: HIGH)
-**Location:** `lib/features/sales/presentation/sales_summary_screen.dart`
-
-**Requirements:**
-- Tab selector: Daily / Weekly / Monthly views
-- Display metrics:
-  - Total sales count
-  - Total revenue
-  - Total cost (sum of qty × cost_price for sold items)
-  - Profit (revenue - cost)
-  - Current stock levels (by product)
-- Date range picker for custom filtering
-- Optional: Chart/graph visualization
-
-**Implementation Notes:**
-- Use `SaleRepositoryImpl.getSalesByDateRange()`
-- Calculate totals by filtering sales + matching product costs
-- Format dates using `intl` package
-
----
+Sales in One is implemented in `lib/features/sales_management/`. Remaining
+planned work includes CSV export and any future enhancements to the existing
+inventory alert and suggestion experience.
 
 ### 5. **Low Stock Alerts** (Priority: MEDIUM)
 **Location:** Currently partial in `HomeScreen` via `DailySummary`
@@ -169,11 +134,10 @@ lib/
    - Tap to edit, delete, or view product details
    - Add new product button
 
-3. **Add Sale Screen**
-   - Select product from dropdown
-   - Enter quantity sold (validates against available stock)
-   - Auto-fill selling price, allow override
-   - Confirm → updates inventory, logs sale, returns to Home
+3. **Sales in One**
+   - Search inventory and select products or scan registered barcodes
+   - Manage cart quantities and validate payment at checkout
+   - Save receipt and update stock only after completing a valid sale
 
 4. **Sales Summary Screen**
    - Toggle: Daily / Weekly / Monthly
@@ -200,11 +164,7 @@ lib/
 
 ## 🚀 Next Immediate Steps
 
-1. **Implement Add Sale Screen** → Connects sales logging to inventory updates
-2. **Build Sales Summary Screen** → Queries and displays aggregated metrics
-3. **Test full sales workflow** → Record sale → see inventory decrease → see summary update
-4. **Add low stock pop-ups** → Notification system
-5. **CSV export** → Backup and external reporting
+1. **CSV export** → Backup and external reporting
 
 ---
 
@@ -218,5 +178,4 @@ lib/
 
 ---
 
-**Last Updated:** Nov 17, 2025  
-**Status:** MVP Phase - Core foundation complete, now implementing sales workflow
+**Status:** Core inventory, sales workflow, local persistence, and sales summaries implemented

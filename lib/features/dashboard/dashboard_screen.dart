@@ -6,6 +6,7 @@ import '../inventory_alerts_and_smart_suggestions/screens/inventory_alerts_scree
 import '../products/domain/product.dart';
 import '../products/presentation/controllers.dart';
 import '../sales/domain/sale_repository.dart';
+import '../sales_management/screens/sales_in_one_screen.dart';
 import 'widgets/quick_action_button.dart';
 import 'widgets/recent_transaction_item.dart';
 import 'widgets/summary_card.dart';
@@ -27,6 +28,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   int _currentIndex = 0;
   bool _showInventoryAlerts = false;
+  int _inventoryAlertsInitialTab = 0;
 
   static const List<NavigationDestination> _destinations = [
     NavigationDestination(
@@ -63,10 +65,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
-  void _openInventoryAlerts() {
+  void _openInventoryAlerts({int initialTabIndex = 0}) {
     setState(() {
       _currentIndex = 1;
       _showInventoryAlerts = true;
+      _inventoryAlertsInitialTab = initialTabIndex;
     });
   }
 
@@ -82,12 +85,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _HomeDashboardPage(
         onNavigate: (index) => _handleNavigate(index),
         products: widget.productController?.state.products ?? const [],
+        onOpenInventoryAlerts: () => _openInventoryAlerts(),
+        onOpenSuggestions: () => _openInventoryAlerts(initialTabIndex: 4),
       ),
       _showInventoryAlerts
           ? InventoryAlertsScreen(
               productController: widget.productController,
               saleRepository: widget.saleRepository,
               onBack: _closeInventoryAlerts,
+              initialTabIndex: _inventoryAlertsInitialTab,
             )
           : widget.productController == null
           ? _InventoryUnavailablePage(
@@ -98,13 +104,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               onRefresh: () => setState(() {}),
               onOpenInventoryAlerts: _openInventoryAlerts,
             ),
-      const _PlaceholderPage(
-        title: 'Sales',
-        message:
-            'The sales module is reserved for its assigned team. '
-            'Its screens, widgets, models, and services are scaffolded '
-            'under lib/features/sales_management/.',
-      ),
+      widget.productController == null || widget.saleRepository == null
+          ? const _SalesUnavailablePage()
+          : SalesInOneScreen(
+              productController: widget.productController!,
+              saleRepository: widget.saleRepository!,
+            ),
       const _PlaceholderPage(
         title: 'Reports',
         message:
@@ -403,8 +408,15 @@ class _InventoryAlertsPageState extends State<_InventoryAlertsPage> {
 class _HomeDashboardPage extends StatefulWidget {
   final ValueChanged<int> onNavigate;
   final List<ProductModel> products;
+  final VoidCallback onOpenInventoryAlerts;
+  final VoidCallback onOpenSuggestions;
 
-  const _HomeDashboardPage({required this.onNavigate, required this.products});
+  const _HomeDashboardPage({
+    required this.onNavigate,
+    required this.products,
+    required this.onOpenInventoryAlerts,
+    required this.onOpenSuggestions,
+  });
 
   @override
   State<_HomeDashboardPage> createState() => _HomeDashboardPageState();
@@ -825,7 +837,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
                 ),
               ),
               TextButton(
-                onPressed: () => widget.onNavigate(1),
+                onPressed: widget.onOpenInventoryAlerts,
                 child: const Text('View All'),
               ),
             ],
@@ -901,24 +913,30 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
-          Text(
-            'Smart Suggestions',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: AppColors.charcoal,
-            ),
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Expanded(
+                child: Text(
+                  'Smart Suggestions',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.charcoal,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: widget.onOpenSuggestions,
+                child: const Text('View Suggestions'),
+              ),
+            ],
           ),
-          SizedBox(height: 12),
-          _SuggestionItem(
-            text: 'Restock rice and canned goods before the weekend peak.',
-          ),
-          _SuggestionItem(
-            text: 'Check 3 products nearing expiration this week.',
-          ),
-          _SuggestionItem(
-            text: 'Review slow-moving items for bundle promotions.',
+          const SizedBox(height: 8),
+          const Text(
+            'Explore product-pairing ideas based on your recorded sales history.',
+            style: TextStyle(color: AppColors.charcoal, height: 1.5),
           ),
         ],
       ),
@@ -1148,6 +1166,25 @@ class _InventoryUnavailablePage extends StatelessWidget {
   );
 }
 
+class _SalesUnavailablePage extends StatelessWidget {
+  const _SalesUnavailablePage();
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Sales in One')),
+    body: const Center(
+      child: Padding(
+        padding: EdgeInsets.all(24),
+        child: Text(
+          'Sales is unavailable because inventory or sales storage '
+          'has not been initialized.',
+          textAlign: TextAlign.center,
+        ),
+      ),
+    ),
+  );
+}
+
 class _PlaceholderPage extends StatelessWidget {
   final String title;
   final String message;
@@ -1188,40 +1225,6 @@ class _PlaceholderPage extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _SuggestionItem extends StatelessWidget {
-  final String text;
-
-  const _SuggestionItem({required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(
-            Icons.lightbulb_outline_rounded,
-            color: AppColors.forestGreen,
-            size: 18,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.charcoal,
-                height: 1.5,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

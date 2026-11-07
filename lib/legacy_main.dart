@@ -502,6 +502,16 @@ class _InventoryScreenState extends State<InventoryManagementScreen> {
       builder: (context) => _ProductFormDialog(
         initialProduct: initial,
         onSave: (product) async {
+          if (_hasDuplicateBarcode(controller, product)) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'That barcode is already assigned to another product.',
+                ),
+              ),
+            );
+            return;
+          }
           await controller.addProduct(product);
           if (context.mounted) {
             Navigator.pop(context);
@@ -523,6 +533,16 @@ class _InventoryScreenState extends State<InventoryManagementScreen> {
       builder: (context) => _ProductFormDialog(
         initialProduct: product,
         onSave: (updated) async {
+          if (_hasDuplicateBarcode(controller, updated)) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'That barcode is already assigned to another product.',
+                ),
+              ),
+            );
+            return;
+          }
           await controller.updateProduct(updated);
           if (context.mounted) {
             Navigator.pop(context);
@@ -531,6 +551,19 @@ class _InventoryScreenState extends State<InventoryManagementScreen> {
         },
       ),
     );
+  }
+
+  bool _hasDuplicateBarcode(
+    ProductController controller,
+    ProductModel candidate,
+  ) {
+    final barcode = candidate.barcode.trim().toLowerCase();
+    return barcode.isNotEmpty &&
+        controller.state.products.any(
+          (product) =>
+              product.id != candidate.id &&
+              product.barcode.trim().toLowerCase() == barcode,
+        );
   }
 }
 
@@ -1170,6 +1203,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
   late TextEditingController _sellingPriceController;
   late TextEditingController _categoryController;
   late TextEditingController _minStockController;
+  late TextEditingController _barcodeController;
 
   @override
   void initState() {
@@ -1190,6 +1224,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     _minStockController = TextEditingController(
       text: product?.minStock.toString() ?? '0',
     );
+    _barcodeController = TextEditingController(text: product?.barcode ?? '');
   }
 
   @override
@@ -1201,6 +1236,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     _sellingPriceController.dispose();
     _categoryController.dispose();
     _minStockController.dispose();
+    _barcodeController.dispose();
     super.dispose();
   }
 
@@ -1253,6 +1289,13 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
               controller: _minStockController,
               decoration: const InputDecoration(labelText: 'Min Stock'),
               keyboardType: TextInputType.number,
+            ),
+            TextField(
+              controller: _barcodeController,
+              decoration: const InputDecoration(
+                labelText: 'Barcode (optional)',
+              ),
+              keyboardType: TextInputType.text,
             ),
           ],
         ),
@@ -1316,6 +1359,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
               sellingPrice: sellingPrice,
               category: _categoryController.text.trim(),
               minStock: minStock,
+              barcode: _barcodeController.text.trim(),
             );
             widget.onSave(product);
           },

@@ -3,12 +3,60 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:bizniz_tracker/app.dart';
 import 'package:bizniz_tracker/core/failure.dart';
+import 'package:bizniz_tracker/features/dashboard/dashboard_screen.dart';
 import 'package:bizniz_tracker/features/products/domain/product.dart';
 import 'package:bizniz_tracker/features/products/domain/repositories.dart';
 import 'package:bizniz_tracker/features/products/presentation/controllers.dart';
+import 'package:bizniz_tracker/features/sales/domain/sale.dart';
+import 'package:bizniz_tracker/features/sales/domain/sale_repository.dart';
 import 'package:dartz/dartz.dart';
 
 void main() {
+  testWidgets('dashboard View All opens the inventory alert screen', (
+    tester,
+  ) async {
+    final controller = ProductController(repository: _FakeProductRepository());
+    await tester.pumpWidget(
+      MaterialApp(home: DashboardScreen(productController: controller)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('View All'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('View All'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('LOW STOCK'), findsOneWidget);
+    expect(find.textContaining('No low-stock products found.'), findsOneWidget);
+  });
+
+  testWidgets('dashboard suggestions shortcut opens smart suggestions', (
+    tester,
+  ) async {
+    final controller = ProductController(repository: _FakeProductRepository());
+    await tester.pumpWidget(
+      MaterialApp(home: DashboardScreen(productController: controller)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('View Suggestions'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('View Suggestions'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('SUGGESTIONS'), findsOneWidget);
+    expect(
+      find.text('Pair slow-moving products with popular items'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('inventory navigation opens inventory alerts', (tester) async {
     final controller = ProductController(repository: _FakeProductRepository());
     await tester.pumpWidget(BiznizTrackerApp(productController: controller));
@@ -79,10 +127,15 @@ void main() {
     expect(find.text('OUT OF STOCK'), findsOneWidget);
   });
 
-  testWidgets('record sale quick action opens the sales placeholder', (
-    tester,
-  ) async {
-    await tester.pumpWidget(const BiznizTrackerApp());
+  testWidgets('record sale quick action opens Sales in One', (tester) async {
+    await tester.pumpWidget(
+      BiznizTrackerApp(
+        productController: ProductController(
+          repository: _FakeProductRepository(),
+        ),
+        saleRepository: _FakeSaleRepository(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.scrollUntilVisible(
@@ -93,13 +146,33 @@ void main() {
     await tester.tap(find.text('Record Sale'));
     await tester.pumpAndSettle();
 
+    expect(find.text('Sales in One'), findsOneWidget);
     expect(
-      find.textContaining(
-        'The sales module is reserved for its assigned team.',
-      ),
+      find.textContaining('No inventory products are available.'),
       findsOneWidget,
     );
   });
+}
+
+class _FakeSaleRepository implements SaleRepository {
+  @override
+  Future<Sale> addSale(Sale sale) async => sale;
+
+  @override
+  Future<List<Sale>> getAllSales() async => [];
+
+  @override
+  Future<List<Sale>> getSalesByDate(DateTime date) async => [];
+
+  @override
+  Future<List<Sale>> getSalesByDateRange(DateTime start, DateTime end) async =>
+      [];
+
+  @override
+  Future<List<Sale>> getSalesByProductId(String productId) async => [];
+
+  @override
+  Future<bool> deleteSale(String id) async => true;
 }
 
 class _FakeProductRepository implements ProductRepository {

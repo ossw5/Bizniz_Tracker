@@ -49,26 +49,21 @@ Navigate to the localhost URL shown in terminal (usually `http://localhost:53445
 - Category: Product category (optional)
 - Min Stock: Alert threshold for low stock (optional, default 0)
 
-### Add Sale Screen
-1. **Select Product**: Choose from dropdown (shows available stock)
-2. **Enter Quantity**: How many units to sell (must be ≤ available stock)
-3. **Verify Price**: Auto-filled from product, editable if different
-4. **Review Revenue**: Shows qty × price calculation
-5. **Confirm**: Saves sale + updates inventory + shows success
-6. **Cancel**: Exit without saving
+### Sales in One
+1. Open **Sales** from the bottom navigation or the dashboard's **Record Sale**
+   action.
+2. Search inventory by product name, category, or barcode; select products or
+   scan/enter a registered barcode.
+3. Adjust quantities in the cart and continue to checkout.
+4. Choose Cash, GCash, or Card and enter the payment amount. Cash change is
+   calculated automatically; invalid or insufficient payments are rejected.
+5. Complete the sale to save its receipt and deduct sold quantities from stock.
+   Canceling before completion does not change inventory.
+6. Open the saved receipt, then use Sales History and Sales Summary for
+   transaction lookup and daily, weekly, or monthly totals.
 
-**What Happens**:
-- Sale record created with timestamp
-- Product quantity reduced
-- Both persisted to Hive database
-- Auto-returns to Home screen
-
-### Sales Summary Screen
-- **Daily Tab**: Today's totals (0 if no sales yet)
-- **Weekly Tab**: This week's aggregate
-- **Monthly Tab**: This month's aggregate
-- **Cards**: Sales count, Revenue, Profit
-- **Breakdown**: Total revenue vs cost vs net profit
+Products, barcode values, sale items, and transaction details are persisted in
+the existing local Hive stores.
 
 ---
 

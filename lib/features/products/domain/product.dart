@@ -18,6 +18,8 @@ class ProductModel extends HiveObject {
   final String category;
   @HiveField(6)
   final int minStock; // minimum stock threshold
+  @HiveField(7, defaultValue: '')
+  final String barcode;
 
   bool get isLowStock =>
       quantity <= 0 || (minStock > 0 && quantity <= minStock);
@@ -30,6 +32,7 @@ class ProductModel extends HiveObject {
     required this.sellingPrice,
     this.category = '',
     this.minStock = 0,
+    this.barcode = '',
   });
 
   // copyWith for updates
@@ -41,6 +44,7 @@ class ProductModel extends HiveObject {
     double? sellingPrice,
     String? category,
     int? minStock,
+    String? barcode,
   }) {
     return ProductModel(
       id: id ?? this.id,
@@ -50,6 +54,7 @@ class ProductModel extends HiveObject {
       sellingPrice: sellingPrice ?? this.sellingPrice,
       category: category ?? this.category,
       minStock: minStock ?? this.minStock,
+      barcode: barcode ?? this.barcode,
     );
   }
 
@@ -64,7 +69,8 @@ class ProductModel extends HiveObject {
           costPrice == other.costPrice &&
           sellingPrice == other.sellingPrice &&
           category == other.category &&
-          minStock == other.minStock;
+          minStock == other.minStock &&
+          barcode == other.barcode;
 
   @override
   int get hashCode =>
@@ -74,5 +80,6 @@ class ProductModel extends HiveObject {
       costPrice.hashCode ^
       sellingPrice.hashCode ^
       category.hashCode ^
-      minStock.hashCode;
+      minStock.hashCode ^
+      barcode.hashCode;
 }

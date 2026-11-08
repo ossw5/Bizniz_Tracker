@@ -58,7 +58,7 @@ class SummaryCard extends StatelessWidget {
           const SizedBox(height: 18),
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
               color: AppColors.grey,
@@ -67,17 +67,14 @@ class SummaryCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.w800,
               color: AppColors.charcoal,
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            note,
-            style: const TextStyle(fontSize: 11, color: AppColors.grey),
-          ),
+          Text(note, style: TextStyle(fontSize: 11, color: AppColors.grey)),
         ],
       ),
     );

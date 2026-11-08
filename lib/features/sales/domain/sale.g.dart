@@ -23,13 +23,23 @@ class SaleAdapter extends TypeAdapter<Sale> {
       sellingPrice: fields[3] as double,
       saleDate: fields[4] as DateTime,
       totalRevenue: fields[5] as double,
+      transactionId: fields[6] as String?,
+      receiptNumber: fields[7] as String?,
+      productNameAtSale: fields[8] as String?,
+      subtotal: fields[9] as double?,
+      discount: fields[10] as double?,
+      transactionTotal: fields[11] as double?,
+      amountPaid: fields[12] as double?,
+      changeDue: fields[13] as double?,
+      paymentMethod: fields[14] as String?,
+      productCostAtSale: fields[15] as double?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Sale obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(16)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -41,7 +51,27 @@ class SaleAdapter extends TypeAdapter<Sale> {
       ..writeByte(4)
       ..write(obj.saleDate)
       ..writeByte(5)
-      ..write(obj.totalRevenue);
+      ..write(obj.totalRevenue)
+      ..writeByte(6)
+      ..write(obj.transactionId)
+      ..writeByte(7)
+      ..write(obj.receiptNumber)
+      ..writeByte(8)
+      ..write(obj.productNameAtSale)
+      ..writeByte(9)
+      ..write(obj.subtotal)
+      ..writeByte(10)
+      ..write(obj.discount)
+      ..writeByte(11)
+      ..write(obj.transactionTotal)
+      ..writeByte(12)
+      ..write(obj.amountPaid)
+      ..writeByte(13)
+      ..write(obj.changeDue)
+      ..writeByte(14)
+      ..write(obj.paymentMethod)
+      ..writeByte(15)
+      ..write(obj.productCostAtSale);
   }
 
   @override

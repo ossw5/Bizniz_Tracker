@@ -55,7 +55,7 @@ class RecentTransactionItem extends StatelessWidget {
                   children: [
                     Text(
                       receiptNumber,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
                         color: AppColors.charcoal,
@@ -84,7 +84,7 @@ class RecentTransactionItem extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   date,
-                  style: const TextStyle(fontSize: 12, color: AppColors.grey),
+                  style: TextStyle(fontSize: 12, color: AppColors.grey),
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -92,14 +92,11 @@ class RecentTransactionItem extends StatelessWidget {
                   children: [
                     Text(
                       '$itemsCount items',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.grey,
-                      ),
+                      style: TextStyle(fontSize: 12, color: AppColors.grey),
                     ),
                     Text(
                       total,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w800,
                         color: AppColors.charcoal,

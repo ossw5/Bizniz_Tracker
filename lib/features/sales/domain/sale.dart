@@ -21,6 +21,26 @@ class Sale extends HiveObject {
 
   @HiveField(5)
   final double totalRevenue; // quantitySold * sellingPrice
+  @HiveField(6)
+  final String? transactionId;
+  @HiveField(7)
+  final String? receiptNumber;
+  @HiveField(8)
+  final String? productNameAtSale;
+  @HiveField(9)
+  final double? subtotal;
+  @HiveField(10)
+  final double? discount;
+  @HiveField(11)
+  final double? transactionTotal;
+  @HiveField(12)
+  final double? amountPaid;
+  @HiveField(13)
+  final double? changeDue;
+  @HiveField(14)
+  final String? paymentMethod;
+  @HiveField(15)
+  final double? productCostAtSale;
 
   Sale({
     required this.id,
@@ -29,6 +49,16 @@ class Sale extends HiveObject {
     required this.sellingPrice,
     required this.saleDate,
     required this.totalRevenue,
+    this.transactionId,
+    this.receiptNumber,
+    this.productNameAtSale,
+    this.subtotal,
+    this.discount,
+    this.transactionTotal,
+    this.amountPaid,
+    this.changeDue,
+    this.paymentMethod,
+    this.productCostAtSale,
   });
 
   // Helper to calculate total revenue
@@ -43,6 +73,16 @@ class Sale extends HiveObject {
     double? sellingPrice,
     DateTime? saleDate,
     double? totalRevenue,
+    String? transactionId,
+    String? receiptNumber,
+    String? productNameAtSale,
+    double? subtotal,
+    double? discount,
+    double? transactionTotal,
+    double? amountPaid,
+    double? changeDue,
+    String? paymentMethod,
+    double? productCostAtSale,
   }) {
     return Sale(
       id: id ?? this.id,
@@ -51,6 +91,16 @@ class Sale extends HiveObject {
       sellingPrice: sellingPrice ?? this.sellingPrice,
       saleDate: saleDate ?? this.saleDate,
       totalRevenue: totalRevenue ?? this.totalRevenue,
+      transactionId: transactionId ?? this.transactionId,
+      receiptNumber: receiptNumber ?? this.receiptNumber,
+      productNameAtSale: productNameAtSale ?? this.productNameAtSale,
+      subtotal: subtotal ?? this.subtotal,
+      discount: discount ?? this.discount,
+      transactionTotal: transactionTotal ?? this.transactionTotal,
+      amountPaid: amountPaid ?? this.amountPaid,
+      changeDue: changeDue ?? this.changeDue,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
+      productCostAtSale: productCostAtSale ?? this.productCostAtSale,
     );
   }
 
@@ -64,7 +114,17 @@ class Sale extends HiveObject {
           quantitySold == other.quantitySold &&
           sellingPrice == other.sellingPrice &&
           saleDate == other.saleDate &&
-          totalRevenue == other.totalRevenue;
+          totalRevenue == other.totalRevenue &&
+          transactionId == other.transactionId &&
+          receiptNumber == other.receiptNumber &&
+          productNameAtSale == other.productNameAtSale &&
+          subtotal == other.subtotal &&
+          discount == other.discount &&
+          transactionTotal == other.transactionTotal &&
+          amountPaid == other.amountPaid &&
+          changeDue == other.changeDue &&
+          paymentMethod == other.paymentMethod &&
+          productCostAtSale == other.productCostAtSale;
 
   @override
   int get hashCode =>
@@ -73,5 +133,15 @@ class Sale extends HiveObject {
       quantitySold.hashCode ^
       sellingPrice.hashCode ^
       saleDate.hashCode ^
-      totalRevenue.hashCode;
+      totalRevenue.hashCode ^
+      transactionId.hashCode ^
+      receiptNumber.hashCode ^
+      productNameAtSale.hashCode ^
+      subtotal.hashCode ^
+      discount.hashCode ^
+      transactionTotal.hashCode ^
+      amountPaid.hashCode ^
+      changeDue.hashCode ^
+      paymentMethod.hashCode ^
+      productCostAtSale.hashCode;
 }

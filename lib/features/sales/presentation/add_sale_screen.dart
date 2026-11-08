@@ -198,6 +198,7 @@ class _AddSaleScreenState extends State<AddSaleScreen> {
       final sale = Sale(
         id: '${DateTime.now().millisecondsSinceEpoch}_${_selectedProduct!.id}',
         productId: _selectedProduct!.id,
+        productCostAtSale: _selectedProduct!.costPrice,
         quantitySold: _quantityInput,
         sellingPrice: price,
         saleDate: DateTime.now(),

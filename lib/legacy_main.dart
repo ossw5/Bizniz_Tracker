@@ -13,6 +13,7 @@ import 'package:bizniz_tracker/core/csv_export.dart';
 import 'package:bizniz_tracker/features/sales/domain/sale_repository.dart';
 import 'package:bizniz_tracker/features/sales/presentation/add_sale_screen.dart';
 import 'package:bizniz_tracker/features/sales/presentation/sales_summary_screen.dart';
+import 'package:bizniz_tracker/features/product_and_inventory_management/screens/expiration_list_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -180,6 +181,7 @@ class _InventoryScreenState extends State<InventoryManagementScreen> {
   @override
   Widget build(BuildContext context) {
     final state = widget.productController.state;
+    final compactActions = MediaQuery.sizeOf(context).width < 600;
     final allProducts = state.products;
 
     // derive categories from existing products (non-empty)
@@ -194,28 +196,78 @@ class _InventoryScreenState extends State<InventoryManagementScreen> {
         ? allProducts
         : allProducts.where((p) => p.category == _selectedCategory).toList();
 
+    void openExpirationManagement() {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) =>
+              ExpirationListScreen(productController: widget.productController),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Inventory Management'),
         centerTitle: true,
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: TextButton(
-              onPressed: widget.onOpenInventoryAlerts,
-              style: TextButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: compactActions
+                    ? IconButton.filled(
+                        tooltip: 'Inventory Alerts',
+                        onPressed: widget.onOpenInventoryAlerts,
+                        icon: const Icon(Icons.notifications_active_outlined),
+                      )
+                    : TextButton.icon(
+                        onPressed: widget.onOpenInventoryAlerts,
+                        style: TextButton.styleFrom(
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        icon: const Icon(Icons.notifications_active_outlined),
+                        label: const Text('Inventory Alerts'),
+                      ),
               ),
-              child: const Text('Inventory Alerts'),
-            ),
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: compactActions
+                    ? IconButton.filled(
+                        tooltip: 'Product Expiration',
+                        onPressed: openExpirationManagement,
+                        icon: const Icon(Icons.event_busy_outlined),
+                      )
+                    : TextButton.icon(
+                        onPressed: openExpirationManagement,
+                        style: TextButton.styleFrom(
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        icon: const Icon(Icons.event_busy_outlined),
+                        label: const Text('Product Expiration'),
+                      ),
+              ),
+            ],
           ),
           IconButton(
             tooltip: 'Export CSV',
@@ -502,6 +554,16 @@ class _InventoryScreenState extends State<InventoryManagementScreen> {
       builder: (context) => _ProductFormDialog(
         initialProduct: initial,
         onSave: (product) async {
+          if (_hasDuplicateBarcode(controller, product)) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'That barcode is already assigned to another product.',
+                ),
+              ),
+            );
+            return;
+          }
           await controller.addProduct(product);
           if (context.mounted) {
             Navigator.pop(context);
@@ -523,6 +585,16 @@ class _InventoryScreenState extends State<InventoryManagementScreen> {
       builder: (context) => _ProductFormDialog(
         initialProduct: product,
         onSave: (updated) async {
+          if (_hasDuplicateBarcode(controller, updated)) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'That barcode is already assigned to another product.',
+                ),
+              ),
+            );
+            return;
+          }
           await controller.updateProduct(updated);
           if (context.mounted) {
             Navigator.pop(context);
@@ -531,6 +603,19 @@ class _InventoryScreenState extends State<InventoryManagementScreen> {
         },
       ),
     );
+  }
+
+  bool _hasDuplicateBarcode(
+    ProductController controller,
+    ProductModel candidate,
+  ) {
+    final barcode = candidate.barcode.trim().toLowerCase();
+    return barcode.isNotEmpty &&
+        controller.state.products.any(
+          (product) =>
+              product.id != candidate.id &&
+              product.barcode.trim().toLowerCase() == barcode,
+        );
   }
 }
 
@@ -1170,6 +1255,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
   late TextEditingController _sellingPriceController;
   late TextEditingController _categoryController;
   late TextEditingController _minStockController;
+  late TextEditingController _barcodeController;
 
   @override
   void initState() {
@@ -1190,6 +1276,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     _minStockController = TextEditingController(
       text: product?.minStock.toString() ?? '0',
     );
+    _barcodeController = TextEditingController(text: product?.barcode ?? '');
   }
 
   @override
@@ -1201,6 +1288,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     _sellingPriceController.dispose();
     _categoryController.dispose();
     _minStockController.dispose();
+    _barcodeController.dispose();
     super.dispose();
   }
 
@@ -1253,6 +1341,13 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
               controller: _minStockController,
               decoration: const InputDecoration(labelText: 'Min Stock'),
               keyboardType: TextInputType.number,
+            ),
+            TextField(
+              controller: _barcodeController,
+              decoration: const InputDecoration(
+                labelText: 'Barcode (optional)',
+              ),
+              keyboardType: TextInputType.text,
             ),
           ],
         ),
@@ -1316,6 +1411,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
               sellingPrice: sellingPrice,
               category: _categoryController.text.trim(),
               minStock: minStock,
+              barcode: _barcodeController.text.trim(),
             );
             widget.onSave(product);
           },

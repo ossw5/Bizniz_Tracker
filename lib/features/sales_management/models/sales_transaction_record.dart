@@ -1,14 +1,7 @@
-import 'package:intl/intl.dart';
-
+import '../../../core/formatters.dart';
 import '../../sales/domain/sale.dart';
 
-final NumberFormat _salesCurrency = NumberFormat.currency(
-  locale: 'en_PH',
-  symbol: '₱',
-  decimalDigits: 2,
-);
-
-String formatSalesCurrency(num amount) => _salesCurrency.format(amount);
+String formatSalesCurrency(num amount) => formatAppCurrency(amount);
 
 class SalesTransactionRecord {
   final String id;

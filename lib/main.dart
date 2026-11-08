@@ -12,6 +12,7 @@ import 'features/products/domain/product.dart';
 import 'features/products/presentation/controllers.dart';
 import 'features/sales/data/sale_repository_impl.dart';
 import 'features/sales/domain/sale.dart';
+import 'features/settings/controllers/app_settings_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,6 +21,8 @@ Future<void> main() async {
   final productsBox = await Hive.openBox<ProductModel>('products_box');
   final salesBox = await Hive.openBox<Sale>('sales_box');
   final settingsBox = await Hive.openBox<bool>('app_settings_box');
+  final appSettingsController = AppSettingsController();
+  await appSettingsController.load();
   await seedReferenceInventoryIfEmpty(
     productsBox: productsBox,
     salesBox: salesBox,
@@ -38,6 +41,7 @@ Future<void> main() async {
       saleRepository: SaleRepositoryImpl(
         local: SaleLocalDataSource(salesBox: salesBox),
       ),
+      settingsController: appSettingsController,
     ),
   );
 }

@@ -19,9 +19,15 @@ You can also run it on an available mobile device with `flutter run`.
 The dashboard previews business summaries, quick actions, a sales overview,
 inventory alerts, product performance, smart suggestions, and recent
 transactions. The five bottom destinations are Home, Inventory, Sales, Reports,
-and More. Sales opens **Sales in One**, which supports inventory-based product
-selection, barcode scanning/manual barcode entry, cart and payment, digital
-receipts, saved sales history, and daily/weekly/monthly summaries.
+and More. Reports contains the daily/weekly/monthly sales summary and links to
+expense tracking. Expense tracking supports offline expense records, category
+totals, correction history, estimated profit, and CSV/PDF export. Sales opens
+**Sales in One**, which supports inventory-based product selection, barcode
+scanning/manual barcode entry, cart and payment, digital receipts, and saved
+sales history. Reports also opens customer credit tracking for customer
+registration, inventory-linked credit sales, partial/full payments, outstanding
+balances, due-date monitoring, customer statements, and authorized balance
+corrections.
 
 On Android, iOS, macOS, and web, barcode scanning uses the device camera where
 available. Windows and Linux use manual barcode entry or a connected
@@ -33,9 +39,8 @@ local Hive stores.
 
 Sales in One is implemented in `lib/features/sales_management/` and integrated
 with the existing dashboard and Hive-backed product and sales repositories.
-Product/inventory and inventory-alert/smart-suggestion screens are also
-integrated with the existing app. Expense tracking and customer credit/debit
-remain planned modules.
+Product/inventory, inventory-alert/smart-suggestion, expense-tracking, and
+customer credit/debit modules are integrated with the existing app.
 
 ```text
 lib/features/

@@ -1,12 +1,20 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
+  static bool _darkMode = false;
+
+  static set darkMode(bool value) => _darkMode = value;
+
   static const Color forestGreen = Color(0xFF1B5E20);
   static const Color freshGreen = Color(0xFF4CAF50);
-  static const Color background = Color(0xFFF8FAF8);
-  static const Color white = Color(0xFFFFFFFF);
-  static const Color charcoal = Color(0xFF212121);
-  static const Color grey = Color(0xFF757575);
+  static Color get background =>
+      _darkMode ? const Color(0xFF111711) : const Color(0xFFF8FAF8);
+  static Color get white =>
+      _darkMode ? const Color(0xFF1B211B) : const Color(0xFFFFFFFF);
+  static Color get charcoal =>
+      _darkMode ? const Color(0xFFE8EDE8) : const Color(0xFF212121);
+  static Color get grey =>
+      _darkMode ? const Color(0xFFB0B8B0) : const Color(0xFF757575);
   static const Color warning = Color(0xFFFF9800);
   static const Color error = Color(0xFFE53935);
   static const Color softGreen = Color(0xFFE8F5E9);
@@ -15,19 +23,20 @@ class AppColors {
 }
 
 class AppTheme {
-  static ThemeData buildTheme() {
+  static ThemeData buildTheme({Brightness brightness = Brightness.light}) {
     final base = ThemeData(
       useMaterial3: true,
       fontFamily: 'Roboto',
+      brightness: brightness,
       scaffoldBackgroundColor: AppColors.background,
       colorScheme: ColorScheme.fromSeed(
         seedColor: AppColors.forestGreen,
-        brightness: Brightness.light,
+        brightness: brightness,
       ),
     );
 
     return base.copyWith(
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: AppColors.background,
         foregroundColor: AppColors.charcoal,
         elevation: 0,
@@ -49,16 +58,16 @@ class AppTheme {
         ),
       ),
       textTheme: base.textTheme.copyWith(
-        headlineSmall: const TextStyle(
+        headlineSmall: TextStyle(
           fontWeight: FontWeight.w700,
           color: AppColors.charcoal,
         ),
-        titleMedium: const TextStyle(
+        titleMedium: TextStyle(
           fontWeight: FontWeight.w600,
           color: AppColors.charcoal,
         ),
-        bodyMedium: const TextStyle(color: AppColors.charcoal),
-        bodySmall: const TextStyle(color: AppColors.grey),
+        bodyMedium: TextStyle(color: AppColors.charcoal),
+        bodySmall: TextStyle(color: AppColors.grey),
       ),
     );
   }

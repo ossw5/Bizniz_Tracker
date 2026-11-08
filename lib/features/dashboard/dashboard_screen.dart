@@ -7,6 +7,9 @@ import '../products/domain/product.dart';
 import '../products/presentation/controllers.dart';
 import '../sales/domain/sale_repository.dart';
 import '../sales_management/screens/sales_in_one_screen.dart';
+import '../reports/screens/reports_screen.dart';
+import '../settings/controllers/app_settings_controller.dart';
+import '../settings/screens/settings_screen.dart';
 import 'widgets/quick_action_button.dart';
 import 'widgets/recent_transaction_item.dart';
 import 'widgets/summary_card.dart';
@@ -14,11 +17,13 @@ import 'widgets/summary_card.dart';
 class DashboardScreen extends StatefulWidget {
   final ProductController? productController;
   final SaleRepository? saleRepository;
+  final AppSettingsController? settingsController;
 
   const DashboardScreen({
     super.key,
     this.productController,
     this.saleRepository,
+    this.settingsController,
   });
 
   @override
@@ -110,17 +115,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
               productController: widget.productController!,
               saleRepository: widget.saleRepository!,
             ),
-      const _PlaceholderPage(
-        title: 'Reports',
-        message:
-            'Business reports will be available in a future development step.',
+      ReportsScreen(
+        saleRepository: widget.saleRepository,
+        products: widget.productController?.state.products ?? const [],
+        productController: widget.productController,
       ),
-      const _PlaceholderPage(
-        title: 'More',
-        message:
-            'Expense tracking, customer credit, and settings are reserved for '
-            'future development.',
-      ),
+      widget.settingsController == null
+          ? const _PlaceholderPage(
+              title: 'More',
+              message: 'Settings are unavailable in this app instance.',
+            )
+          : SettingsScreen(controller: widget.settingsController!),
     ];
 
     return Scaffold(
@@ -357,7 +362,7 @@ class _InventoryAlertsPageState extends State<_InventoryAlertsPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       '3x Sardines 250g',
                       style: TextStyle(
                         fontSize: 15,
@@ -368,10 +373,7 @@ class _InventoryAlertsPageState extends State<_InventoryAlertsPage> {
                     const SizedBox(height: 2),
                     Text(
                       _selectedMainTab == 4 ? 'Suggested action' : 'Category',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.grey,
-                      ),
+                      style: TextStyle(fontSize: 12, color: AppColors.grey),
                     ),
                     const SizedBox(height: 6),
                     Text(
@@ -387,7 +389,7 @@ class _InventoryAlertsPageState extends State<_InventoryAlertsPage> {
                   ],
                 ),
               ),
-              const Text(
+              Text(
                 'QTY: 12',
                 style: TextStyle(
                   fontSize: 12,
@@ -605,7 +607,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
+                  children: [
                     Text(
                       'Bizniz Tracker',
                       style: TextStyle(
@@ -632,14 +634,14 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
                       context,
                       'Notifications feature is being developed.',
                     ),
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.notifications_none_rounded,
                       color: AppColors.charcoal,
                     ),
                   ),
                   IconButton(
                     onPressed: () => widget.onNavigate(4),
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.settings_outlined,
                       color: AppColors.charcoal,
                     ),
@@ -655,7 +657,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Good day, Business Owner!',
                     style: TextStyle(
                       fontSize: 16,
@@ -687,7 +689,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
                       color: AppColors.warning,
                     ),
                     const SizedBox(width: 6),
-                    const Text(
+                    Text(
                       'Sample data',
                       style: TextStyle(
                         fontSize: 11,
@@ -708,7 +710,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
   Widget _buildSectionTitle(String title) {
     return Text(
       title,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 18,
         fontWeight: FontWeight.w700,
         color: AppColors.charcoal,
@@ -736,7 +738,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
+              Text(
                 'Sales Overview',
                 style: TextStyle(
                   fontSize: 18,
@@ -777,7 +779,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
           const SizedBox(height: 18),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
+            children: [
               Text(
                 'Total sales',
                 style: TextStyle(fontSize: 13, color: AppColors.grey),
@@ -795,7 +797,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
           const SizedBox(height: 6),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
+            children: [
               Text(
                 'Transactions',
                 style: TextStyle(fontSize: 13, color: AppColors.grey),
@@ -828,7 +830,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
+              Text(
                 'Inventory Alerts',
                 style: TextStyle(
                   fontSize: 18,
@@ -871,7 +873,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Product Performance',
             style: TextStyle(
               fontSize: 18,
@@ -917,7 +919,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Smart Suggestions',
                   style: TextStyle(
@@ -934,7 +936,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
             ],
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Explore product-pairing ideas based on your recorded sales history.',
             style: TextStyle(color: AppColors.charcoal, height: 1.5),
           ),
@@ -982,7 +984,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
+              Text(
                 'Recent Transactions',
                 style: TextStyle(
                   fontSize: 18,
@@ -1023,7 +1025,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
               children: [
                 Text(
                   label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
                     color: AppColors.charcoal,
@@ -1031,12 +1033,12 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
                 ),
                 Text(
                   value,
-                  style: const TextStyle(fontSize: 12, color: AppColors.grey),
+                  style: TextStyle(fontSize: 12, color: AppColors.grey),
                 ),
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: AppColors.grey),
+          Icon(Icons.chevron_right_rounded, color: AppColors.grey),
         ],
       ),
     );
@@ -1078,7 +1080,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
               color: AppColors.charcoal,
@@ -1097,7 +1099,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
                       children: [
                         Text(
                           items[index],
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                             color: AppColors.charcoal,
@@ -1105,10 +1107,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
                         ),
                         Text(
                           values[index],
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: AppColors.grey,
-                          ),
+                          style: TextStyle(fontSize: 11, color: AppColors.grey),
                         ),
                       ],
                     ),
@@ -1214,7 +1213,7 @@ class _PlaceholderPage extends StatelessWidget {
                   Text(
                     message,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
                       color: AppColors.charcoal,

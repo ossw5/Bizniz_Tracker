@@ -1,6 +1,7 @@
 import 'package:bizniz_tracker/features/products/domain/product.dart';
 import 'package:bizniz_tracker/features/products/domain/repositories.dart';
 import 'package:bizniz_tracker/core/failure.dart';
+import 'package:bizniz_tracker/features/settings/services/activity_log_service.dart';
 
 class ProductState {
   final bool loading;
@@ -24,9 +25,13 @@ class ProductState {
 
 class ProductController {
   final ProductRepository repository;
+  final ActivityLogService? activityLog;
   ProductState state = ProductState();
 
-  ProductController({required this.repository});
+  ProductController({
+    required this.repository,
+    this.activityLog = const ActivityLogService(),
+  });
 
   Future<void> loadProducts() async {
     state = ProductState(loading: true, products: state.products);
@@ -40,22 +45,58 @@ class ProductController {
 
   Future<void> addProduct(ProductModel product) async {
     final res = await repository.addProduct(product);
-    await res.fold<Future<void>>((f) async {
-      state = state.copyWith(error: f.message);
-    }, (_) => loadProducts());
+    await res.fold<Future<void>>(
+      (f) async {
+        state = state.copyWith(error: f.message);
+      },
+      (_) async {
+        await loadProducts();
+        final logger = activityLog;
+        if (logger != null) {
+          logger.recordInBackground(
+            description: 'Added product: ${product.name}',
+            category: 'Inventory',
+          );
+        }
+      },
+    );
   }
 
   Future<void> updateProduct(ProductModel product) async {
     final res = await repository.updateProduct(product);
-    await res.fold<Future<void>>((f) async {
-      state = state.copyWith(error: f.message);
-    }, (_) => loadProducts());
+    await res.fold<Future<void>>(
+      (f) async {
+        state = state.copyWith(error: f.message);
+      },
+      (_) async {
+        await loadProducts();
+        final logger = activityLog;
+        if (logger != null) {
+          logger.recordInBackground(
+            description: 'Updated product: ${product.name}',
+            category: 'Inventory',
+          );
+        }
+      },
+    );
   }
 
   Future<void> deleteProduct(String id) async {
     final res = await repository.deleteProduct(id);
-    await res.fold<Future<void>>((f) async {
-      state = state.copyWith(error: f.message);
-    }, (_) => loadProducts());
+    await res.fold<Future<void>>(
+      (f) async {
+        state = state.copyWith(error: f.message);
+      },
+      (_) async {
+        await loadProducts();
+        final logger = activityLog;
+        if (logger != null) {
+          logger.recordInBackground(
+            description: 'Deleted product: $id',
+            category: 'Inventory',
+          );
+        }
+      },
+    );
   }
 }

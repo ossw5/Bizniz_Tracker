@@ -13,6 +13,7 @@ import 'package:bizniz_tracker/core/csv_export.dart';
 import 'package:bizniz_tracker/features/sales/domain/sale_repository.dart';
 import 'package:bizniz_tracker/features/sales/presentation/add_sale_screen.dart';
 import 'package:bizniz_tracker/features/sales/presentation/sales_summary_screen.dart';
+import 'package:bizniz_tracker/features/product_and_inventory_management/screens/expiration_list_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -180,6 +181,7 @@ class _InventoryScreenState extends State<InventoryManagementScreen> {
   @override
   Widget build(BuildContext context) {
     final state = widget.productController.state;
+    final compactActions = MediaQuery.sizeOf(context).width < 600;
     final allProducts = state.products;
 
     // derive categories from existing products (non-empty)
@@ -194,28 +196,78 @@ class _InventoryScreenState extends State<InventoryManagementScreen> {
         ? allProducts
         : allProducts.where((p) => p.category == _selectedCategory).toList();
 
+    void openExpirationManagement() {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) =>
+              ExpirationListScreen(productController: widget.productController),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Inventory Management'),
         centerTitle: true,
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: TextButton(
-              onPressed: widget.onOpenInventoryAlerts,
-              style: TextButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: compactActions
+                    ? IconButton.filled(
+                        tooltip: 'Inventory Alerts',
+                        onPressed: widget.onOpenInventoryAlerts,
+                        icon: const Icon(Icons.notifications_active_outlined),
+                      )
+                    : TextButton.icon(
+                        onPressed: widget.onOpenInventoryAlerts,
+                        style: TextButton.styleFrom(
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        icon: const Icon(Icons.notifications_active_outlined),
+                        label: const Text('Inventory Alerts'),
+                      ),
               ),
-              child: const Text('Inventory Alerts'),
-            ),
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: compactActions
+                    ? IconButton.filled(
+                        tooltip: 'Product Expiration',
+                        onPressed: openExpirationManagement,
+                        icon: const Icon(Icons.event_busy_outlined),
+                      )
+                    : TextButton.icon(
+                        onPressed: openExpirationManagement,
+                        style: TextButton.styleFrom(
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        icon: const Icon(Icons.event_busy_outlined),
+                        label: const Text('Product Expiration'),
+                      ),
+              ),
+            ],
           ),
           IconButton(
             tooltip: 'Export CSV',

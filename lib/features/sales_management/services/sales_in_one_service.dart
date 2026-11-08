@@ -3,6 +3,7 @@ import '../../products/presentation/controllers.dart';
 import '../../sales/domain/sale.dart';
 import '../../sales/domain/sale_repository.dart';
 import '../models/sales_transaction_record.dart';
+import '../../settings/services/activity_log_service.dart';
 
 class SalesInOneException implements Exception {
   final String message;
@@ -18,11 +19,13 @@ class SalesInOneService {
 
   final ProductController productController;
   final SaleRepository saleRepository;
+  final ActivityLogService? activityLog;
   final Map<String, Future<SalesTransactionRecord>> _inFlightTransactions = {};
 
   SalesInOneService({
     required this.productController,
     required this.saleRepository,
+    this.activityLog = const ActivityLogService(),
   });
 
   Future<SalesTransactionRecord> completeSale({
@@ -148,6 +151,7 @@ class SalesInOneService {
           receiptNumber: receiptNumber,
           productId: product.id,
           productNameAtSale: product.name,
+          productCostAtSale: product.costPrice,
           quantitySold: quantities[product.id]!,
           sellingPrice: product.sellingPrice,
           saleDate: date,
@@ -225,6 +229,12 @@ class SalesInOneService {
         for (final product in originalProducts)
           updatedById[product.id] ?? product,
       ],
+    );
+    activityLog?.recordInBackground(
+      description:
+          'Completed sale $receiptNumber for ${formatSalesCurrency(total)}',
+      category: 'Sales',
+      occurredAt: date,
     );
     return SalesTransactionRecord.fromSales(sales);
   }

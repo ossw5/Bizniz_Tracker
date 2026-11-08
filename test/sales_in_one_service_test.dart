@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:dartz/dartz.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hive/hive.dart';
 
 import 'package:bizniz_tracker/core/failure.dart';
 import 'package:bizniz_tracker/features/products/domain/product.dart';
@@ -10,12 +13,22 @@ import 'package:bizniz_tracker/features/sales/domain/sale_repository.dart';
 import 'package:bizniz_tracker/features/sales_management/services/sales_in_one_service.dart';
 
 void main() {
+  late Directory directory;
   late _ProductRepository productRepository;
   late ProductController productController;
   late _SaleRepository saleRepository;
   late SalesInOneService service;
 
-  setUp(() {
+  setUpAll(() async {
+    directory = await Directory.systemTemp.createTemp('sales_service_');
+    Hive.init(directory.path);
+  });
+
+  setUp(() async {
+    final activityBox = Hive.isBoxOpen('business_activity_log_box')
+        ? Hive.box<dynamic>('business_activity_log_box')
+        : await Hive.openBox<dynamic>('business_activity_log_box');
+    await activityBox.clear();
     productRepository = _ProductRepository([
       _product('bread', 'Bread', 10, 12.5),
       _product('milk', 'Milk', 4, 25),
@@ -27,6 +40,11 @@ void main() {
       productController: productController,
       saleRepository: saleRepository,
     );
+  });
+
+  tearDownAll(() async {
+    await Hive.close();
+    await directory.delete(recursive: true);
   });
 
   test(

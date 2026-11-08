@@ -3,21 +3,23 @@ import 'package:flutter/material.dart';
 import '../../products/domain/product.dart';
 import '../../products/presentation/controllers.dart';
 import '../../sales/domain/sale_repository.dart';
+import '../../settings/services/activity_log_service.dart';
 import '../models/sales_transaction_record.dart';
 import '../services/sales_in_one_service.dart';
 import 'barcode_scanner_screen.dart';
 import 'receipt_screen.dart';
 import 'sales_history_screen.dart';
-import 'sales_summary_screen.dart';
 
 class SalesInOneScreen extends StatefulWidget {
   final ProductController productController;
   final SaleRepository saleRepository;
+  final ActivityLogService? activityLog;
 
   const SalesInOneScreen({
     super.key,
     required this.productController,
     required this.saleRepository,
+    this.activityLog = const ActivityLogService(),
   });
 
   @override
@@ -102,6 +104,7 @@ class _SalesInOneScreenState extends State<SalesInOneScreen> {
           saleService: SalesInOneService(
             productController: widget.productController,
             saleRepository: widget.saleRepository,
+            activityLog: widget.activityLog,
           ),
         ),
       ),
@@ -168,16 +171,6 @@ class _SalesInOneScreenState extends State<SalesInOneScreen> {
               ),
             ),
             icon: const Icon(Icons.history_rounded),
-          ),
-          IconButton(
-            tooltip: 'Sales summary',
-            onPressed: () => Navigator.of(context).push<void>(
-              MaterialPageRoute(
-                builder: (_) =>
-                    SalesSummaryScreen(saleRepository: widget.saleRepository),
-              ),
-            ),
-            icon: const Icon(Icons.bar_chart_rounded),
           ),
         ],
       ),

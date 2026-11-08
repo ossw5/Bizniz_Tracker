@@ -36,8 +36,10 @@ void main() {
         ),
       ];
       final productRepository = _ProductRepository(products);
-      final controller = ProductController(repository: productRepository)
-        ..state = ProductState(products: products);
+      final controller = ProductController(
+        repository: productRepository,
+        activityLog: null,
+      )..state = ProductState(products: products);
       final sales = _SaleRepository();
       debugDefaultTargetPlatformOverride = TargetPlatform.windows;
 
@@ -47,6 +49,7 @@ void main() {
           home: SalesInOneScreen(
             productController: controller,
             saleRepository: sales,
+            activityLog: null,
           ),
         ),
       );
@@ -94,6 +97,7 @@ void main() {
       expect(find.text('₱50.00'), findsWidgets);
       expect(find.text('₱0.00'), findsWidgets);
       expect(sales.records, hasLength(1));
+      expect(sales.records.single.productCostAtSale, 15);
       expect(productRepository.products.first.quantity, 2);
 
       await tester.tap(find.text('Done'));
@@ -113,37 +117,7 @@ void main() {
       await tester.tap(find.byTooltip('Back to sales'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('Sales summary'));
-      await tester.pumpAndSettle();
-      expect(find.text('Sales Summary'), findsOneWidget);
-      expect(
-        tester
-            .widget<Text>(
-              find.byKey(const ValueKey('summary-transaction-count')),
-            )
-            .data,
-        '1',
-      );
-      await tester.tap(find.text('Weekly'));
-      await tester.pumpAndSettle();
-      expect(
-        tester
-            .widget<Text>(
-              find.byKey(const ValueKey('summary-transaction-count')),
-            )
-            .data,
-        '1',
-      );
-      await tester.tap(find.text('Monthly'));
-      await tester.pumpAndSettle();
-      expect(
-        tester
-            .widget<Text>(
-              find.byKey(const ValueKey('summary-transaction-count')),
-            )
-            .data,
-        '1',
-      );
+      expect(find.byTooltip('Sales summary'), findsNothing);
       debugDefaultTargetPlatformOverride = null;
     },
   );

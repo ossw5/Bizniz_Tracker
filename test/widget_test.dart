@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hive/hive.dart';
 
 import 'package:bizniz_tracker/app.dart';
 import 'package:bizniz_tracker/core/failure.dart';
@@ -12,10 +15,26 @@ import 'package:bizniz_tracker/features/sales/domain/sale_repository.dart';
 import 'package:dartz/dartz.dart';
 
 void main() {
+  late Directory directory;
+
+  setUpAll(() async {
+    directory = await Directory.systemTemp.createTemp('widget_test_');
+    Hive.init(directory.path);
+    await Hive.openBox<dynamic>('business_activity_log_box');
+  });
+
+  tearDownAll(() async {
+    await Hive.close();
+    await directory.delete(recursive: true);
+  });
+
   testWidgets('dashboard View All opens the inventory alert screen', (
     tester,
   ) async {
-    final controller = ProductController(repository: _FakeProductRepository());
+    final controller = ProductController(
+      repository: _FakeProductRepository(),
+      activityLog: null,
+    );
     await tester.pumpWidget(
       MaterialApp(home: DashboardScreen(productController: controller)),
     );
@@ -36,7 +55,10 @@ void main() {
   testWidgets('dashboard suggestions shortcut opens smart suggestions', (
     tester,
   ) async {
-    final controller = ProductController(repository: _FakeProductRepository());
+    final controller = ProductController(
+      repository: _FakeProductRepository(),
+      activityLog: null,
+    );
     await tester.pumpWidget(
       MaterialApp(home: DashboardScreen(productController: controller)),
     );
@@ -58,7 +80,10 @@ void main() {
   });
 
   testWidgets('inventory navigation opens inventory alerts', (tester) async {
-    final controller = ProductController(repository: _FakeProductRepository());
+    final controller = ProductController(
+      repository: _FakeProductRepository(),
+      activityLog: null,
+    );
     await tester.pumpWidget(BiznizTrackerApp(productController: controller));
     await tester.pumpAndSettle();
 
@@ -69,7 +94,7 @@ void main() {
 
     expect(find.text('Inventory Management'), findsOneWidget);
     expect(find.text('Inventory Alerts'), findsOneWidget);
-    await tester.tap(find.text('Inventory Alerts'));
+    await tester.tap(find.byIcon(Icons.notifications_active_outlined));
     await tester.pumpAndSettle();
 
     expect(find.text('Inventory Alerts'), findsOneWidget);
@@ -80,19 +105,23 @@ void main() {
   testWidgets('out-of-stock products appear in inventory alerts', (
     tester,
   ) async {
-    final controller = ProductController(repository: _FakeProductRepository())
-      ..state = ProductState(
-        products: [
-          ProductModel(
-            id: 'zero-stock',
-            name: 'Out of stock item',
-            quantity: 0,
-            costPrice: 1,
-            sellingPrice: 2,
-            minStock: 5,
-          ),
-        ],
-      );
+    final controller =
+        ProductController(
+            repository: _FakeProductRepository(),
+            activityLog: null,
+          )
+          ..state = ProductState(
+            products: [
+              ProductModel(
+                id: 'zero-stock',
+                name: 'Out of stock item',
+                quantity: 0,
+                costPrice: 1,
+                sellingPrice: 2,
+                minStock: 5,
+              ),
+            ],
+          );
 
     await tester.pumpWidget(BiznizTrackerApp(productController: controller));
     await tester.pumpAndSettle();
@@ -109,7 +138,10 @@ void main() {
   testWidgets('adding a product makes it available to inventory alerts', (
     tester,
   ) async {
-    final controller = ProductController(repository: _FakeProductRepository());
+    final controller = ProductController(
+      repository: _FakeProductRepository(),
+      activityLog: null,
+    );
     await tester.pumpWidget(BiznizTrackerApp(productController: controller));
     await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.inventory_2_outlined));
@@ -121,8 +153,9 @@ void main() {
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
+    expect(controller.state.products, hasLength(1));
     expect(find.text('Test product'), findsOneWidget);
-    await tester.tap(find.text('Inventory Alerts'));
+    await tester.tap(find.byIcon(Icons.notifications_active_outlined));
     await tester.pumpAndSettle();
     expect(find.text('OUT OF STOCK'), findsOneWidget);
   });
@@ -132,6 +165,7 @@ void main() {
       BiznizTrackerApp(
         productController: ProductController(
           repository: _FakeProductRepository(),
+          activityLog: null,
         ),
         saleRepository: _FakeSaleRepository(),
       ),
@@ -152,14 +186,73 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('reports navigation shows saved sales totals', (tester) async {
+    final now = DateTime.now();
+    final saleRepository = _FakeSaleRepository(
+      sales: [
+        Sale(
+          id: 'line-1',
+          transactionId: 'receipt-1',
+          productId: 'bread',
+          productNameAtSale: 'Bread',
+          quantitySold: 2,
+          sellingPrice: 15,
+          saleDate: now,
+          totalRevenue: 30,
+        ),
+        Sale(
+          id: 'line-2',
+          transactionId: 'receipt-1',
+          productId: 'milk',
+          productNameAtSale: 'Milk',
+          quantitySold: 1,
+          sellingPrice: 10,
+          saleDate: now,
+          totalRevenue: 10,
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      BiznizTrackerApp(
+        productController: ProductController(
+          repository: _FakeProductRepository(),
+          activityLog: null,
+        ),
+        saleRepository: saleRepository,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.bar_chart_outlined));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sales Summary'), findsOneWidget);
+    expect(find.text('This week'), findsOneWidget);
+    expect(find.text('Expense Tracking'), findsOneWidget);
+    expect(find.text('Credit and Debit Tracking'), findsOneWidget);
+    await tester.tap(find.text('View all sales summary'));
+    await tester.pumpAndSettle();
+    expect(find.text('Daily Summary'), findsOneWidget);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('summary-transaction-count')))
+          .data,
+      '1',
+    );
+  });
 }
 
 class _FakeSaleRepository implements SaleRepository {
+  final List<Sale> sales;
+
+  _FakeSaleRepository({this.sales = const []});
+
   @override
   Future<Sale> addSale(Sale sale) async => sale;
 
   @override
-  Future<List<Sale>> getAllSales() async => [];
+  Future<List<Sale>> getAllSales() async => sales;
 
   @override
   Future<List<Sale>> getSalesByDate(DateTime date) async => [];

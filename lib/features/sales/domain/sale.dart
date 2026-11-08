@@ -39,6 +39,8 @@ class Sale extends HiveObject {
   final double? changeDue;
   @HiveField(14)
   final String? paymentMethod;
+  @HiveField(15)
+  final double? productCostAtSale;
 
   Sale({
     required this.id,
@@ -56,6 +58,7 @@ class Sale extends HiveObject {
     this.amountPaid,
     this.changeDue,
     this.paymentMethod,
+    this.productCostAtSale,
   });
 
   // Helper to calculate total revenue
@@ -79,6 +82,7 @@ class Sale extends HiveObject {
     double? amountPaid,
     double? changeDue,
     String? paymentMethod,
+    double? productCostAtSale,
   }) {
     return Sale(
       id: id ?? this.id,
@@ -96,6 +100,7 @@ class Sale extends HiveObject {
       amountPaid: amountPaid ?? this.amountPaid,
       changeDue: changeDue ?? this.changeDue,
       paymentMethod: paymentMethod ?? this.paymentMethod,
+      productCostAtSale: productCostAtSale ?? this.productCostAtSale,
     );
   }
 
@@ -118,7 +123,8 @@ class Sale extends HiveObject {
           transactionTotal == other.transactionTotal &&
           amountPaid == other.amountPaid &&
           changeDue == other.changeDue &&
-          paymentMethod == other.paymentMethod;
+          paymentMethod == other.paymentMethod &&
+          productCostAtSale == other.productCostAtSale;
 
   @override
   int get hashCode =>
@@ -136,5 +142,6 @@ class Sale extends HiveObject {
       transactionTotal.hashCode ^
       amountPaid.hashCode ^
       changeDue.hashCode ^
-      paymentMethod.hashCode;
+      paymentMethod.hashCode ^
+      productCostAtSale.hashCode;
 }

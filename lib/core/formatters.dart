@@ -1,9 +1,29 @@
 import 'package:intl/intl.dart';
 
-final NumberFormat _phpFormat = NumberFormat.currency(
-  locale: 'en_PH',
-  symbol: '₱',
-  decimalDigits: 2,
-);
+String _currencyCode = 'PHP';
+String _datePattern = 'MMM d, yyyy';
 
-String formatCurrency(double value) => _phpFormat.format(value);
+void configureAppFormatting({
+  required String currencyCode,
+  required String datePattern,
+}) {
+  _currencyCode = currencyCode;
+  _datePattern = datePattern;
+}
+
+String formatAppCurrency(num value) {
+  final (locale, symbol) = switch (_currencyCode) {
+    'USD' => ('en_US', r'$'),
+    'EUR' => ('de_DE', '€'),
+    _ => ('en_PH', '₱'),
+  };
+  return NumberFormat.currency(
+    locale: locale,
+    symbol: symbol,
+    decimalDigits: 2,
+  ).format(value);
+}
+
+String formatCurrency(double value) => formatAppCurrency(value);
+
+String formatAppDate(DateTime date) => DateFormat(_datePattern).format(date);

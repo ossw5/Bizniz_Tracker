@@ -46,6 +46,7 @@ void main() {
         receiptNumber: 'BZT-000001',
         productId: product.id,
         productNameAtSale: product.name,
+        productCostAtSale: product.costPrice,
         quantitySold: 3,
         sellingPrice: 15,
         saleDate: DateTime(2026, 11, 7, 9),
@@ -70,6 +71,7 @@ void main() {
       expect(storedSale.transactionId, 'receipt-1');
       expect(storedSale.amountPaid, 50);
       expect(storedSale.changeDue, 5);
+      expect(storedSale.productCostAtSale, 10);
       expect(
         SalesTransactionRecord.groupSales(salesBox.values).single.total,
         45,

@@ -22,9 +22,10 @@ class RecentTransactionItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 380;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
+      padding: EdgeInsets.all(compact ? 10 : 12),
       decoration: BoxDecoration(
         color: AppColors.background,
         borderRadius: BorderRadius.circular(16),
@@ -33,8 +34,8 @@ class RecentTransactionItem extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 42,
-            height: 42,
+            width: compact ? 36 : 42,
+            height: compact ? 36 : 42,
             decoration: BoxDecoration(
               color: AppColors.softGreen,
               borderRadius: BorderRadius.circular(14),
@@ -51,16 +52,20 @@ class RecentTransactionItem extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      receiptNumber,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.charcoal,
+                    Expanded(
+                      child: Text(
+                        receiptNumber,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: compact ? 12 : 14,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.charcoal,
+                        ),
                       ),
                     ),
+                    const SizedBox(width: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,
@@ -84,20 +89,27 @@ class RecentTransactionItem extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   date,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 12, color: AppColors.grey),
                 ),
                 const SizedBox(height: 8),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      '$itemsCount items',
-                      style: TextStyle(fontSize: 12, color: AppColors.grey),
+                    Expanded(
+                      child: Text(
+                        '$itemsCount items',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 12, color: AppColors.grey),
+                      ),
                     ),
                     Text(
                       total,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: compact ? 12 : 14,
                         fontWeight: FontWeight.w800,
                         color: AppColors.charcoal,
                       ),

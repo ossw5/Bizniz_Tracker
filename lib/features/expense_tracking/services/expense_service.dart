@@ -8,6 +8,16 @@ import '../models/expense_record.dart';
 class ExpenseService {
   static const recordsBoxName = 'business_expenses_box';
   static const correctionsBoxName = 'expense_corrections_box';
+  static const customCategoriesBoxName = 'expense_custom_categories_box';
+  static const defaultCategories = [
+    'Utilities',
+    'Rent',
+    'Supplies',
+    'Transportation',
+    'Salaries',
+    'Maintenance',
+    'Other',
+  ];
   static Future<void> _writeQueue = Future<void>.value();
   static int _idSequence = 0;
 
@@ -42,6 +52,9 @@ class ExpenseService {
       .map((value) => ExpenseRecord.fromMap(value as Map))
       .toList(growable: false);
 
+  String _normalizeCategory(String value) =>
+      value.trim().replaceAll(RegExp(r'\s+'), ' ');
+
   void _validate(ExpenseRecord record) {
     if (record.category.trim().isEmpty) {
       throw ArgumentError.value(
@@ -50,11 +63,15 @@ class ExpenseService {
         'Choose a category.',
       );
     }
-    if (record.description.trim().isEmpty) {
+    final description = record.description.trim();
+    final isOtherCategory = record.category.trim().toLowerCase() == 'other';
+    if (description.isEmpty) {
       throw ArgumentError.value(
         record.description,
         'description',
-        'Description is required.',
+        isOtherCategory
+            ? 'Please specify the expense description.'
+            : 'Description is required.',
       );
     }
     if (!record.amount.isFinite || record.amount <= 0) {
@@ -63,6 +80,41 @@ class ExpenseService {
         'amount',
         'Amount must be greater than zero.',
       );
+    }
+  }
+
+  Future<List<String>> loadCategories() async {
+    try {
+      final box = await _openBox(customCategoriesBoxName);
+      final custom = box.values
+          .whereType<String>()
+          .map(_normalizeCategory)
+          .where((category) => category.isNotEmpty)
+          .toSet();
+      final merged = <String>{
+        ...defaultCategories.map(_normalizeCategory),
+        ...custom,
+      }.toList(growable: false)..sort();
+      return merged;
+    } catch (_) {
+      return defaultCategories.toList(growable: false);
+    }
+  }
+
+  Future<void> addCustomCategory(String category) async {
+    final normalized = _normalizeCategory(category);
+    if (normalized.isEmpty || normalized.toLowerCase() == 'other') return;
+    try {
+      final box = await _openBox(customCategoriesBoxName);
+      final existing = box.values
+          .whereType<String>()
+          .map(_normalizeCategory)
+          .toSet();
+      if (existing.contains(normalized)) return;
+      final id = _newId('custom-category', box);
+      await box.put(id, normalized);
+    } catch (_) {
+      // The app can run without Hive initialization in some tests and previews.
     }
   }
 
@@ -80,18 +132,43 @@ class ExpenseService {
     required String description,
     required double amount,
     required DateTime expenseDate,
+    String paymentMethod = 'Cash',
+    String? referenceNumber,
+    String? recordedBy,
+    String remarks = '',
+    String expenseType = 'Operating Expense',
   }) {
     return _serializeWrites(() async {
       final box = await _openBox(recordsBoxName);
       final historyBox = await _openBox(correctionsBoxName);
+      final trimmedCategory = category.trim();
+      final trimmedDescription = description.trim();
+      final isOtherCategory = trimmedCategory.toLowerCase() == 'other';
+      final normalizedCategory =
+          isOtherCategory && trimmedDescription.isNotEmpty
+          ? _normalizeCategory(trimmedDescription)
+          : trimmedCategory;
+      final canonicalDescription = trimmedDescription;
+      if (isOtherCategory && trimmedDescription.isNotEmpty) {
+        await addCustomCategory(normalizedCategory);
+      }
       final id = _newId('expense', box);
       final record = ExpenseRecord(
         id: id,
-        category: category.trim(),
-        description: description.trim(),
+        category: normalizedCategory,
+        description: canonicalDescription,
         amount: amount,
         expenseDate: _dateOnly(expenseDate),
         createdAt: DateTime.now(),
+        paymentMethod: paymentMethod,
+        referenceNumber: referenceNumber?.trim().isEmpty == true
+            ? null
+            : referenceNumber?.trim(),
+        recordedBy: recordedBy?.trim().isEmpty == true
+            ? null
+            : recordedBy?.trim(),
+        remarks: remarks.trim(),
+        expenseType: expenseType,
       );
       _validate(record);
       final correction = ExpenseCorrection(

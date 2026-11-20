@@ -6,18 +6,22 @@ import '../controllers/app_settings_controller.dart';
 import '../models/activity_record.dart';
 import '../models/app_settings.dart';
 import '../services/activity_log_service.dart';
+import '../services/data_transfer_service.dart';
 import '../services/local_backup_service.dart';
+import 'data_backup_transfer_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final AppSettingsController controller;
   final ActivityLogService activityLog;
   final LocalBackupService backupService;
+  final Future<void> Function()? onDataRestored;
 
   const SettingsScreen({
     super.key,
     required this.controller,
     this.activityLog = const ActivityLogService(),
     this.backupService = const LocalBackupService(),
+    this.onDataRestored,
   });
 
   @override
@@ -148,6 +152,131 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) setState(() => _backupStatus = 'Restore failed: $error');
     } finally {
       if (mounted) setState(() => _backupInProgress = false);
+    }
+  }
+
+  Future<void> _openDataBackupTransfer() async {
+    final database = widget.backupService.database;
+    if (database == null) {
+      _showMessage(
+        'Data Backup & Transfer is unavailable because the database is not configured.',
+      );
+      return;
+    }
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => DataBackupTransferScreen(
+          transferService: DataTransferService(
+            database: database,
+            backupService: widget.backupService,
+          ),
+          onDataImported: _refreshAfterTransfer,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _refreshAfterTransfer() async {
+    try {
+      await widget.controller.load();
+      await widget.onDataRestored?.call();
+      await _refreshActivities();
+    } catch (error) {
+      if (mounted) {
+        _showMessage(
+          'Data was imported, but some screens could not refresh: $error',
+        );
+      }
+    }
+  }
+
+  Future<void> _resetAppPreferences() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset app preferences and data?'),
+        content: const Text(
+          'This permanently deletes all business records stored on this device, '
+          'including products, inventory, batches, sales, expenses, customers, '
+          'credits, stock movements, and activity history. App preferences '
+          'and local temporary data will also be reset. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await widget.controller.resetPreferences();
+      if (!mounted) return;
+      final refreshError = await _refreshAfterReset();
+      if (!mounted) return;
+      _showMessage(
+        refreshError == null
+            ? 'Local app data was deleted and the app was reset.'
+            : 'Local data was reset, but some screens could not refresh: '
+                  '$refreshError',
+      );
+    } catch (error) {
+      if (mounted) _showMessage('Could not reset local app data: $error');
+    }
+  }
+
+  Future<void> _resetEntireApplication() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset the entire app?'),
+        content: const Text(
+          'This resets app preferences, store configuration, and temporary '
+          'local settings. Your products, categories, inventory, '
+          'batches, sales, expenses, customers, credits, stock movements, and '
+          'business history will be preserved.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Reset Settings'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await widget.controller.resetEntireApplication();
+      if (!mounted) return;
+      final refreshError = await _refreshAfterReset();
+      if (!mounted) return;
+      _showMessage(
+        refreshError == null
+            ? 'App preferences and configuration were reset. Business data was preserved.'
+            : 'App settings were reset, but some screens could not refresh: '
+                  '$refreshError',
+      );
+    } catch (error) {
+      if (mounted) _showMessage('Could not reset the app: $error');
+    }
+  }
+
+  Future<String?> _refreshAfterReset() async {
+    try {
+      await widget.onDataRestored?.call();
+      await _refreshActivities();
+      return null;
+    } catch (error) {
+      return error.toString();
     }
   }
 
@@ -403,6 +532,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
           _SettingsSection(
+            icon: Icons.swap_horiz_rounded,
+            title: 'Data Backup & Transfer',
+            description:
+                'Password-protected backup, restore, and catalog sharing',
+            children: [
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.security_rounded),
+                title: const Text('Open Data Backup & Transfer'),
+                subtitle: const Text(
+                  'Export or import encrypted application data',
+                ),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: _openDataBackupTransfer,
+              ),
+            ],
+          ),
+          _SettingsSection(
             icon: Icons.backup_outlined,
             title: 'Local Data Backup',
             description: 'Export or restore this device’s business data',
@@ -439,6 +586,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 8),
                 Text(_backupStatus!),
               ],
+            ],
+          ),
+          _SettingsSection(
+            icon: Icons.restore_rounded,
+            title: 'Reset Options',
+            description:
+                'Delete all local business data, or reset app settings while preserving it',
+            children: [
+              FilledButton.tonalIcon(
+                onPressed: _resetAppPreferences,
+                icon: const Icon(Icons.delete_forever_rounded),
+                label: const Text('Reset App Preferences'),
+              ),
+              const SizedBox(height: 10),
+              FilledButton.icon(
+                onPressed: _resetEntireApplication,
+                icon: const Icon(Icons.settings_backup_restore_rounded),
+                label: const Text('Reset Entire Application'),
+              ),
             ],
           ),
           _SettingsSection(

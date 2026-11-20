@@ -1,34 +1,41 @@
-import 'package:flutter/material.dart';
+import 'dart:convert';
 
+import 'package:flutter/material.dart';
+import 'package:file_saver/file_saver.dart';
+import 'package:printing/printing.dart';
+
+import '../../reports/services/report_export_service.dart';
+import '../../reports/services/report_period.dart';
 import '../../sales/domain/sale_repository.dart';
 import '../models/sales_transaction_record.dart';
+import '../services/sales_summary_pdf_builder.dart';
 
 class SalesSummaryScreen extends StatefulWidget {
   final SaleRepository saleRepository;
+  final String businessName;
+  final String preparedBy;
 
-  const SalesSummaryScreen({super.key, required this.saleRepository});
+  const SalesSummaryScreen({
+    super.key,
+    required this.saleRepository,
+    this.businessName = 'Bizniz Tracker',
+    this.preparedBy = '',
+  });
 
   @override
   State<SalesSummaryScreen> createState() => _SalesSummaryScreenState();
 }
 
-class _SalesSummaryScreenState extends State<SalesSummaryScreen>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
+class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
   late Future<List<SalesTransactionRecord>> _transactionsFuture;
+  ReportPeriod _period = ReportPeriod.monthly;
   DateTime _selectedDate = DateTime.now();
+  DateTimeRange? _customRange;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
     _transactionsFuture = _loadTransactions();
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   Future<List<SalesTransactionRecord>> _loadTransactions() async =>
@@ -41,52 +48,278 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen>
     await _transactionsFuture;
   }
 
+  DateTimeRange get _periodRange => ReportPeriodRange.resolve(
+    period: _period,
+    selectedDate: _selectedDate,
+    customRange: _customRange,
+  );
+
+  String get _periodLabel => reportPeriodLabel(_period);
+
   Future<void> _selectDate() async {
     final today = DateTime.now();
+    if (_period == ReportPeriod.custom) {
+      final selectedDay = DateTime(
+        _selectedDate.year,
+        _selectedDate.month,
+        _selectedDate.day,
+      );
+      final range = await showDateRangePicker(
+        context: context,
+        firstDate: DateTime(2000),
+        lastDate: DateTime(today.year + 5),
+        initialDateRange:
+            _customRange ?? DateTimeRange(start: selectedDay, end: selectedDay),
+      );
+      if (range != null) {
+        setState(() {
+          _customRange = DateTimeRange(
+            start: DateTime(
+              range.start.year,
+              range.start.month,
+              range.start.day,
+            ),
+            end: DateTime(range.end.year, range.end.month, range.end.day),
+          );
+        });
+      }
+      return;
+    }
     final selected = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
       firstDate: DateTime(2000),
       lastDate: DateTime(today.year + 5),
     );
-    if (selected != null) setState(() => _selectedDate = selected);
-  }
-
-  DateTimeRange _periodRange(int tab) {
-    final day = DateTime(
-      _selectedDate.year,
-      _selectedDate.month,
-      _selectedDate.day,
-    );
-    if (tab == 0) {
-      return DateTimeRange(start: day, end: day.add(const Duration(days: 1)));
+    if (selected != null) {
+      setState(() {
+        _selectedDate = _period == ReportPeriod.yearly
+            ? DateTime(selected.year)
+            : selected;
+      });
     }
-    if (tab == 1) {
-      final start = day.subtract(Duration(days: day.weekday - 1));
-      return DateTimeRange(
-        start: start,
-        end: start.add(const Duration(days: 7)),
-      );
-    }
-    final start = DateTime(day.year, day.month);
-    return DateTimeRange(
-      start: start,
-      end: DateTime(start.year, start.month + 1),
-    );
   }
 
   List<SalesTransactionRecord> _transactionsForPeriod(
-    List<SalesTransactionRecord> allTransactions,
-    int tab,
+    List<SalesTransactionRecord> transactions,
   ) {
-    final range = _periodRange(tab);
-    return allTransactions
+    final range = _periodRange;
+    return transactions
         .where(
-          (transaction) =>
-              !transaction.date.isBefore(range.start) &&
-              transaction.date.isBefore(range.end),
+          (transaction) => ReportPeriodRange.contains(range, transaction.date),
         )
         .toList();
+  }
+
+  String _dateText(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+  String get _businessName => widget.businessName.trim().isEmpty
+      ? 'Bizniz Tracker'
+      : widget.businessName.trim();
+
+  Future<void> _export(
+    List<SalesTransactionRecord> transactions, {
+    required bool includeProducts,
+    required String format,
+  }) async {
+    final rows = _reportRows(transactions, includeProducts: includeProducts);
+    final now = DateTime.now();
+    final fileName =
+        'sales_${includeProducts ? 'product_detail_' : ''}${_dateText(_periodRange.start)}_${now.millisecondsSinceEpoch}';
+    try {
+      if (format == 'pdf') {
+        final document = const SalesSummaryPdfBuilder().build(
+          title:
+              '${includeProducts ? 'Sales Summary with Product Total Sales' : 'Sales Summary'} - $_businessName',
+          rows: rows,
+        );
+        await Printing.layoutPdf(
+          name: '$fileName.pdf',
+          onLayout: (_) => document.save(),
+        );
+      } else {
+        final bytes = format == 'csv'
+            ? utf8.encode(ReportExportService.toCsv(rows))
+            : ReportExportService.toXlsx(
+                rows,
+                columnWidths: const [30, 18, 18, 20, 23, 24],
+              );
+        await const ReportExportService().save(
+          fileName: fileName,
+          extension: format,
+          bytes: bytes,
+          mimeType: format == 'csv' ? MimeType.csv : MimeType.microsoftExcel,
+        );
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${includeProducts ? 'Detailed' : 'General'} sales $format report exported.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not export sales report: $error')),
+      );
+    }
+  }
+
+  List<List<Object?>> _reportRows(
+    List<SalesTransactionRecord> transactions, {
+    required bool includeProducts,
+  }) {
+    final range = _periodRange;
+    final totalRevenue = transactions.fold<double>(
+      0,
+      (sum, transaction) => sum + transaction.total,
+    );
+    final totalDiscounts = transactions.fold<double>(
+      0,
+      (sum, transaction) => sum + transaction.discount,
+    );
+    final quantity = transactions.fold<int>(
+      0,
+      (sum, transaction) =>
+          sum +
+          transaction.items.fold(
+            0,
+            (subtotal, item) => subtotal + item.quantitySold,
+          ),
+    );
+    final productSales = _productSales(transactions);
+    final cost = productSales.values.fold<double>(
+      0,
+      (sum, product) => sum + product.costOfGoods,
+    );
+    final paymentTotals = <String, double>{};
+    for (final transaction in transactions) {
+      paymentTotals.update(
+        transaction.paymentMethod,
+        (total) => total + transaction.total,
+        ifAbsent: () => transaction.total,
+      );
+    }
+    final rows = <List<Object?>>[
+      ['Business Name', _businessName],
+      [
+        'Report Type',
+        includeProducts
+            ? 'Sales Summary with Product Total Sales'
+            : 'Sales Summary',
+      ],
+      ['Report Period', _periodLabel],
+      ['Start Date', _dateText(range.start)],
+      ['End Date', _dateText(range.end.subtract(const Duration(days: 1)))],
+      ['Generated Date', _dateText(DateTime.now())],
+      ['Prepared By', widget.preparedBy],
+      [],
+      ['Sales Overview'],
+      ['Total Sales Revenue', totalRevenue.toStringAsFixed(2)],
+      ['Total Completed Transactions', transactions.length],
+      ['Total Quantity of Products Sold', quantity],
+      ['Total Discounts', totalDiscounts.toStringAsFixed(2)],
+      ['Estimated Gross Profit', (totalRevenue - cost).toStringAsFixed(2)],
+      [],
+      ['Sales Transaction Records'],
+      [
+        'Receipt/Transaction Number',
+        'Transaction Date',
+        'Number of Items',
+        'Total Amount',
+        'Payment Method',
+        'Transaction Status',
+      ],
+    ];
+    for (final transaction in transactions) {
+      rows.add([
+        transaction.receiptNumber,
+        _dateText(transaction.date),
+        transaction.items.fold<int>(0, (sum, item) => sum + item.quantitySold),
+        transaction.total.toStringAsFixed(2),
+        transaction.paymentMethod,
+        'Completed',
+      ]);
+    }
+    rows.addAll([
+      [],
+      ['Payment Summary'],
+      ['Payment Method', 'Total Amount'],
+    ]);
+    for (final entry in paymentTotals.entries) {
+      rows.add([entry.key, entry.value.toStringAsFixed(2)]);
+    }
+    if (!includeProducts) return rows;
+    rows.addAll([
+      [],
+      ['Product Total Sales'],
+      [
+        'Product Name',
+        'Product ID',
+        'Total Quantity Sold',
+        'Total Sales Revenue',
+        'Total Cost of Goods Sold',
+        'Estimated Profit per Product',
+      ],
+    ]);
+    for (final product in productSales.values) {
+      rows.add([
+        product.name,
+        product.id,
+        product.quantity,
+        product.revenue.toStringAsFixed(2),
+        product.costOfGoods.toStringAsFixed(2),
+        product.profit.toStringAsFixed(2),
+      ]);
+    }
+    for (final (label, selector) in <(String, double Function(_ProductSales))>[
+      ('Best-Selling Products', (product) => product.quantity.toDouble()),
+      ('Products with Highest Sales Revenue', (product) => product.revenue),
+      ('Products with Highest Estimated Profit', (product) => product.profit),
+    ]) {
+      final ranked = productSales.values.toList()
+        ..sort((first, second) => selector(second).compareTo(selector(first)));
+      rows.addAll([
+        [],
+        [label],
+        ['Product Name', 'Product ID', 'Quantity', 'Sales Revenue', 'Profit'],
+      ]);
+      for (final product in ranked.take(5)) {
+        rows.add([
+          product.name,
+          product.id,
+          product.quantity,
+          product.revenue.toStringAsFixed(2),
+          product.profit.toStringAsFixed(2),
+        ]);
+      }
+    }
+    return rows;
+  }
+
+  Map<String, _ProductSales> _productSales(
+    List<SalesTransactionRecord> transactions,
+  ) {
+    final products = <String, _ProductSales>{};
+    for (final transaction in transactions) {
+      for (final item in transaction.items) {
+        final product = products.putIfAbsent(
+          item.productId,
+          () => _ProductSales(
+            id: item.productId,
+            name: item.productNameAtSale ?? item.productId,
+          ),
+        );
+        product
+          ..quantity += item.quantitySold
+          ..revenue += item.sellingPrice * item.quantitySold
+          ..costOfGoods += (item.productCostAtSale ?? 0) * item.quantitySold;
+      }
+    }
+    return products;
   }
 
   @override
@@ -106,14 +339,6 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen>
             icon: const Icon(Icons.refresh_rounded),
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'Daily'),
-            Tab(text: 'Weekly'),
-            Tab(text: 'Monthly'),
-          ],
-        ),
       ),
       body: FutureBuilder<List<SalesTransactionRecord>>(
         future: _transactionsFuture,
@@ -129,117 +354,157 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen>
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          final allTransactions = snapshot.data ?? [];
-          return TabBarView(
-            controller: _tabController,
-            children: [
-              for (var period = 0; period < 3; period++)
-                _summaryBody(context, allTransactions, period),
-            ],
+          final transactions = _transactionsForPeriod(snapshot.data ?? []);
+          final total = transactions.fold<double>(
+            0,
+            (sum, transaction) => sum + transaction.total,
+          );
+          final products = _productSales(transactions).values.toList()
+            ..sort((first, second) => first.name.compareTo(second.name));
+          final productsSold = products.fold<int>(
+            0,
+            (sum, product) => sum + product.quantity,
+          );
+          return RefreshIndicator(
+            onRefresh: _refresh,
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                _periodPicker(context),
+                const SizedBox(height: 16),
+                Text(
+                  'Completed sales · ${transactions.length} transaction${transactions.length == 1 ? '' : 's'} · $productsSold items',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                Card(
+                  child: ListTile(
+                    title: const Text('Total Sales Revenue'),
+                    trailing: Text(
+                      formatSalesCurrency(total),
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                ),
+                if (products.isEmpty)
+                  const Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(20),
+                      child: Text(
+                        'No completed sales in this period.',
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  )
+                else
+                  for (final product in products)
+                    Card(
+                      child: ListTile(
+                        title: Text(product.name),
+                        subtitle: Text(
+                          'ID: ${product.id} · ${product.quantity} sold',
+                        ),
+                        trailing: Text(formatSalesCurrency(product.revenue)),
+                      ),
+                    ),
+                const SizedBox(height: 12),
+                Text(
+                  'Export report',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                for (final includeProducts in [false, true])
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              includeProducts
+                                  ? 'Sales Summary with Product Total Sales'
+                                  : 'Sales Summary',
+                            ),
+                          ),
+                          PopupMenuButton<String>(
+                            tooltip: 'Choose export format',
+                            onSelected: (format) => _export(
+                              transactions,
+                              includeProducts: includeProducts,
+                              format: format,
+                            ),
+                            itemBuilder: (context) => const [
+                              PopupMenuItem(value: 'pdf', child: Text('PDF')),
+                              PopupMenuItem(
+                                value: 'xlsx',
+                                child: Text('Excel (.xlsx)'),
+                              ),
+                              PopupMenuItem(value: 'csv', child: Text('CSV')),
+                            ],
+                            icon: const Icon(Icons.download_rounded),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           );
         },
       ),
     );
   }
 
-  Widget _summaryBody(
-    BuildContext context,
-    List<SalesTransactionRecord> allTransactions,
-    int period,
-  ) {
-    final range = _periodRange(period);
-    final transactions = _transactionsForPeriod(allTransactions, period);
-    final totalSales = transactions.fold<double>(
-      0,
-      (total, transaction) => total + transaction.total,
-    );
-    final labels = ['Daily', 'Weekly', 'Monthly'];
-    return RefreshIndicator(
-      onRefresh: _refresh,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          OutlinedButton.icon(
-            onPressed: _selectDate,
-            icon: const Icon(Icons.calendar_today_outlined),
-            label: Text(
-              period == 0
-                  ? MaterialLocalizations.of(
-                      context,
-                    ).formatMediumDate(_selectedDate)
-                  : '${MaterialLocalizations.of(context).formatMediumDate(range.start)} – '
-                        '${MaterialLocalizations.of(context).formatMediumDate(range.end.subtract(const Duration(days: 1)))}',
+  Widget _periodPicker(BuildContext context) {
+    final range = _periodRange;
+    final label = _period == ReportPeriod.daily
+        ? MaterialLocalizations.of(context).formatMediumDate(_selectedDate)
+        : '${MaterialLocalizations.of(context).formatMediumDate(range.start)} – '
+              '${MaterialLocalizations.of(context).formatMediumDate(range.end.subtract(const Duration(days: 1)))}';
+    const options = <(ReportPeriod, String)>[
+      (ReportPeriod.daily, 'Daily'),
+      (ReportPeriod.weekly, 'Weekly'),
+      (ReportPeriod.monthly, 'Monthly'),
+      (ReportPeriod.yearly, 'Yearly'),
+      (ReportPeriod.custom, 'Custom Date Range'),
+    ];
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            DropdownButtonFormField<ReportPeriod>(
+              initialValue: _period,
+              decoration: const InputDecoration(labelText: 'Report period'),
+              items: [
+                for (final (period, name) in options)
+                  DropdownMenuItem(value: period, child: Text(name)),
+              ],
+              onChanged: (period) {
+                if (period != null) setState(() => _period = period);
+              },
             ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            '${labels[period]} Summary',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 12),
-          _SummaryValueCard(
-            label: 'Total Sales',
-            value: formatSalesCurrency(totalSales),
-            icon: Icons.payments_rounded,
-          ),
-          const SizedBox(height: 8),
-          _SummaryValueCard(
-            label: 'Transactions',
-            value: '${transactions.length}',
-            icon: Icons.receipt_long_rounded,
-            valueKey: const ValueKey('summary-transaction-count'),
-          ),
-          const SizedBox(height: 16),
-          if (transactions.isEmpty)
-            const Card(
-              child: Padding(
-                padding: EdgeInsets.all(20),
-                child: Text(
-                  'No saved transactions in this period.',
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            )
-          else
-            for (final transaction in transactions)
-              ListTile(
-                title: Text(transaction.receiptNumber),
-                subtitle: Text(
-                  MaterialLocalizations.of(
-                    context,
-                  ).formatMediumDate(transaction.date),
-                ),
-                trailing: Text(formatSalesCurrency(transaction.total)),
-              ),
-        ],
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _selectDate,
+              icon: const Icon(Icons.calendar_today_outlined),
+              label: Text(label),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _SummaryValueCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Key? valueKey;
+class _ProductSales {
+  final String id;
+  final String name;
+  int quantity = 0;
+  double revenue = 0;
+  double costOfGoods = 0;
 
-  const _SummaryValueCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-    this.valueKey,
-  });
+  _ProductSales({required this.id, required this.name});
 
-  @override
-  Widget build(BuildContext context) => Card(
-    child: ListTile(
-      leading: Icon(icon),
-      title: Text(label),
-      trailing: Text(
-        value,
-        key: valueKey,
-        style: Theme.of(context).textTheme.titleMedium,
-      ),
-    ),
-  );
+  double get profit => revenue - costOfGoods;
 }

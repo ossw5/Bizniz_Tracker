@@ -24,6 +24,7 @@ void main() {
     ActivityLogService.boxName,
     ExpenseService.recordsBoxName,
     ExpenseService.correctionsBoxName,
+    ExpenseService.customCategoriesBoxName,
     CreditTrackingService.customersBoxName,
     CreditTrackingService.creditsBoxName,
     CreditTrackingService.paymentsBoxName,
@@ -120,6 +121,23 @@ void main() {
     expect(() => backupService.validateBackup(backup), throwsFormatException);
     expect(Hive.box<ProductModel>('products_box').get('bread')?.name, 'Bread');
   });
+
+  test(
+    'expense custom categories are backed up and old backups remain valid',
+    () async {
+      final categories = Hive.box<dynamic>(
+        ExpenseService.customCategoriesBoxName,
+      );
+      await categories.put('custom-category-1', 'Packaging');
+      final backup = await backupService.createBackup();
+      final backupBoxes = backup['boxes'] as Map<String, dynamic>;
+      expect(backupBoxes[ExpenseService.customCategoriesBoxName], hasLength(1));
+
+      backupBoxes.remove(ExpenseService.customCategoriesBoxName);
+      await backupService.restoreBackup(backup);
+      expect(categories.get('custom-category-1'), 'Packaging');
+    },
+  );
 
   test(
     'restore rolls back earlier box writes when a later section is invalid',

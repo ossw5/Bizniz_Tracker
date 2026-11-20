@@ -1,11 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive/hive.dart';
+import 'package:bizniz_tracker/core/app_database.dart';
 import 'package:bizniz_tracker/features/products/data/datasources/product_local_datasource_impl.dart';
 import 'package:bizniz_tracker/features/products/data/repositories/product_repository_impl.dart';
 import 'package:bizniz_tracker/features/products/presentation/controllers.dart';
-import 'package:bizniz_tracker/features/sales/domain/sale.dart';
 import 'package:bizniz_tracker/features/sales/data/sale_repository_impl.dart';
+import 'package:bizniz_tracker/features/sales/domain/sale.dart';
 import 'package:bizniz_tracker/features/sales/presentation/sales_controller.dart';
-import 'package:hive/hive.dart';
 import 'package:bizniz_tracker/features/products/domain/product.dart';
 
 final productsBoxProvider = Provider<Box<ProductModel>>((ref) {
@@ -16,18 +17,22 @@ final salesBoxProvider = Provider<Box<Sale>>((ref) {
   throw UnimplementedError('Open the Hive box before using this provider');
 });
 
+final appDatabaseProvider = Provider<AppDatabase>((ref) {
+  throw UnimplementedError('Provide the opened app database before use');
+});
+
 // local datasource provider
 final productLocalDataSourceProvider = Provider<ProductLocalDataSourceImpl>((
   ref,
 ) {
-  final box = ref.watch(productsBoxProvider);
-  return ProductLocalDataSourceImpl(productsBox: box);
+  final database = ref.watch(appDatabaseProvider);
+  return ProductLocalDataSourceImpl(database: database);
 });
 
 // sales datasource provider
 final saleLocalDataSourceProvider = Provider<SaleLocalDataSource>((ref) {
-  final box = ref.watch(salesBoxProvider);
-  return SaleLocalDataSource(salesBox: box);
+  final database = ref.watch(appDatabaseProvider);
+  return SaleLocalDataSource(database: database);
 });
 
 // repository provider

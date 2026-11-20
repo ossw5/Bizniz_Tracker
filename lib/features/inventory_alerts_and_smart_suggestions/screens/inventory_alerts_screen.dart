@@ -795,7 +795,7 @@ class _SuggestionProductPreview extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        InventoryProductThumbnail(productName: product.name, size: 44),
+        InventoryProductMonogram(productName: product.name, size: 44),
         const SizedBox(width: 8),
         Expanded(
           child: Column(

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../products/domain/product.dart';
 
-class InventoryProductThumbnail extends StatelessWidget {
+class InventoryProductMonogram extends StatelessWidget {
   final String productName;
   final double size;
 
-  const InventoryProductThumbnail({
+  const InventoryProductMonogram({
     super.key,
     required this.productName,
     this.size = 52,
@@ -15,90 +16,81 @@ class InventoryProductThumbnail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final trimmedName = productName.trim();
-    final productAsset = _sampleAssetForName(trimmedName);
-    final initial = trimmedName.isEmpty
+    final name = productName.trim();
+    final initial = name.isEmpty
         ? null
-        : String.fromCharCode(trimmedName.runes.first).toUpperCase();
+        : String.fromCharCode(name.runes.first).toUpperCase();
+    final color = _colorForName(name);
 
     return Semantics(
-      label: productAsset == null
-          ? 'Image placeholder for ${trimmedName.isEmpty ? 'product' : trimmedName}'
-          : 'Product image for $trimmedName',
-      image: true,
+      label: name.isEmpty ? 'Product' : 'Product $name',
       child: ExcludeSemantics(
         child: Container(
           width: size,
           height: size,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: theme.colorScheme.primary.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(12),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [color, color.withValues(alpha: 0.78)],
+            ),
+            borderRadius: BorderRadius.circular(size * 0.3),
+            boxShadow: [
+              BoxShadow(
+                color: color.withValues(alpha: 0.22),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-          child: productAsset != null
-              ? ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.asset(
-                    productAsset,
-                    fit: BoxFit.contain,
-                    width: size,
-                    height: size,
-                  ),
-                )
-              : initial == null
-              ? Icon(
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              if (initial == null)
+                Icon(
                   Icons.inventory_2_outlined,
-                  color: theme.colorScheme.primary,
+                  color: Colors.white,
+                  size: size * 0.48,
                 )
-              : Text(
+              else
+                Text(
                   initial,
                   style: theme.textTheme.titleLarge?.copyWith(
-                    color: theme.colorScheme.primary,
-                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    fontSize: size * 0.42,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
+              Positioned(
+                right: size * 0.12,
+                bottom: size * 0.12,
+                child: Container(
+                  width: size * 0.13,
+                  height: size * 0.13,
+                  decoration: BoxDecoration(
+                    color: AppColors.gold,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 1.5),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  String? _sampleAssetForName(String name) {
-    final normalizedName = name.toLowerCase();
-    if (normalizedName.contains('lucky me') ||
-        normalizedName.contains('pancit canton')) {
-      return 'assets/product_samples/lucky_pancit_canton.png';
-    }
-    if (normalizedName.contains('milk') || normalizedName.contains('netle')) {
-      return 'assets/product_samples/fresh_milk.png';
-    }
-    if (normalizedName.contains('gardenia')) {
-      return 'assets/product_samples/gardenia_bread.png';
-    }
-    if (normalizedName.contains('coca-cola') ||
-        normalizedName.contains('coca cola') ||
-        normalizedName.contains('coke')) {
-      return 'assets/product_samples/coca_cola.png';
-    }
-    if (normalizedName.contains('century') || normalizedName.contains('tuna')) {
-      return 'assets/product_samples/century_tuna.png';
-    }
-    if (normalizedName.contains('chips ahoy')) {
-      return 'assets/product_samples/chips_ahoy.png';
-    }
-    if (normalizedName.contains('milo')) {
-      return 'assets/product_samples/milo.png';
-    }
-    if (normalizedName.contains('yakult')) {
-      return 'assets/product_samples/yakult.png';
-    }
-    if (normalizedName.contains('tide')) {
-      return 'assets/product_samples/tide.png';
-    }
-    if (normalizedName.contains('nescafe') ||
-        normalizedName.contains('nescafé')) {
-      return 'assets/product_samples/nescafe.png';
-    }
-    return null;
+  Color _colorForName(String name) {
+    const palette = [
+      AppColors.forestGreen,
+      Color(0xFF426A86),
+      Color(0xFF75608A),
+      Color(0xFF8A642D),
+    ];
+    final seed = name.runes.fold<int>(0, (total, rune) => total + rune);
+    return palette[seed % palette.length];
   }
 }
 
@@ -117,62 +109,122 @@ class InventoryAlertProductCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final statusColor = product.quantity <= 0 ? Colors.red : Colors.orange;
+    final isOutOfStock = product.quantity <= 0;
+    final statusColor = isOutOfStock
+        ? theme.colorScheme.error
+        : theme.colorScheme.secondary;
 
     return Card(
+      clipBehavior: Clip.antiAlias,
       margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            InventoryProductThumbnail(productName: product.name),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    product.name,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  if (product.category.trim().isNotEmpty)
-                    Text(product.category, style: theme.textTheme.bodySmall),
-                  if (subtitle != null)
-                    Text(subtitle!, style: theme.textTheme.bodySmall),
-                  if (status != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Text(
-                        status!,
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          color: statusColor,
-                          fontWeight: FontWeight.w700,
-                        ),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(left: BorderSide(color: statusColor, width: 3)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              InventoryProductMonogram(productName: product.name),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      product.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  'QTY: ${product.quantity}',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+                    if (product.category.trim().isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        product.category,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                    if (status != null) ...[
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          status!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: statusColor,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-                if (product.minStock > 0)
-                  Text(
-                    'MIN: ${product.minStock}',
-                    style: theme.textTheme.bodySmall,
-                  ),
-              ],
-            ),
-          ],
+              ),
+              const SizedBox(width: 8),
+              Container(
+                constraints: const BoxConstraints(minWidth: 56),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.09),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'QTY',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        letterSpacing: 0.6,
+                      ),
+                    ),
+                    Text(
+                      '${product.quantity}',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: statusColor,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    if (product.minStock > 0)
+                      Text(
+                        'MIN ${product.minStock}',
+                        maxLines: 1,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontSize: 9,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

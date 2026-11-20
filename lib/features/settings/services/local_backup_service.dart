@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:hive/hive.dart';
 
+import '../../../core/app_database.dart';
 import '../../customer_credit_and_debit_tracking/services/credit_tracking_service.dart';
 import '../../expense_tracking/services/expense_service.dart';
 import '../../product_and_inventory_management/services/expiration_service.dart';
@@ -21,6 +22,7 @@ class LocalBackupService {
     ActivityLogService.boxName,
     ExpenseService.recordsBoxName,
     ExpenseService.correctionsBoxName,
+    ExpenseService.customCategoriesBoxName,
     CreditTrackingService.customersBoxName,
     CreditTrackingService.creditsBoxName,
     CreditTrackingService.paymentsBoxName,
@@ -29,7 +31,11 @@ class LocalBackupService {
     ExpirationService.historyBoxName,
   ];
 
-  const LocalBackupService();
+  static const _optionalBoxNames = {ExpenseService.customCategoriesBoxName};
+
+  final AppDatabase? database;
+
+  const LocalBackupService({this.database});
 
   Future<String?> exportBackup() async {
     await _openAllBoxes();
@@ -57,27 +63,25 @@ class LocalBackupService {
       ];
     }
 
-    final productsBox = Hive.box<ProductModel>('products_box');
-    final salesBox = Hive.box<Sale>('sales_box');
-    return {
+    final products = database == null
+        ? Hive.box<ProductModel>('products_box').values
+        : await database!.getProducts();
+    final sales = database == null
+        ? Hive.box<Sale>('sales_box').values
+        : await database!.getSales();
+    final backup = <String, Object?>{
       'format': 'bizniz_tracker_backup',
       'formatVersion': formatVersion,
       'createdAt': DateTime.now().toIso8601String(),
       'boxes': {
         ...dynamicBoxes,
         'products_box': [
-          for (final key in productsBox.keys)
-            {
-              'key': _jsonSafe(key),
-              'value': _productToMap(productsBox.get(key as dynamic)!),
-            },
+          for (final product in products)
+            {'key': _jsonSafe(product.id), 'value': _productToMap(product)},
         ],
         'sales_box': [
-          for (final key in salesBox.keys)
-            {
-              'key': _jsonSafe(key),
-              'value': _saleToMap(salesBox.get(key as dynamic)!),
-            },
+          for (final sale in sales)
+            {'key': _jsonSafe(sale.id), 'value': _saleToMap(sale)},
         ],
         'app_settings_box': [
           for (final key in Hive.box<bool>('app_settings_box').keys)
@@ -90,6 +94,10 @@ class LocalBackupService {
         ],
       },
     };
+    if (database != null) {
+      backup['databaseSnapshot'] = await database!.exportDataSnapshot();
+    }
+    return backup;
   }
 
   Future<Map<String, dynamic>?> pickAndValidateBackup() async {
@@ -127,6 +135,15 @@ class LocalBackupService {
       );
     }
     final boxes = Map<String, dynamic>.from(rawBoxes);
+    if (backup.containsKey('databaseSnapshot')) {
+      final database = this.database;
+      if (database == null) {
+        throw const FormatException(
+          'This backup requires a configured application database.',
+        );
+      }
+      database.validateDataSnapshot(backup['databaseSnapshot']);
+    }
     final knownNames = {
       'products_box',
       'sales_box',
@@ -140,6 +157,7 @@ class LocalBackupService {
     }
     for (final name in knownNames) {
       final records = boxes[name];
+      if (records == null && _optionalBoxNames.contains(name)) continue;
       if (records is! List) {
         throw FormatException(
           'The $name backup section is missing or invalid.',
@@ -157,7 +175,10 @@ class LocalBackupService {
     }
   }
 
-  Future<void> restoreBackup(Map<String, dynamic> backup) async {
+  Future<void> restoreBackup(
+    Map<String, dynamic> backup, {
+    bool replaceExisting = false,
+  }) async {
     validateBackup(backup);
     final boxes = Map<String, dynamic>.from(backup['boxes'] as Map);
     final knownNames = {
@@ -171,9 +192,54 @@ class LocalBackupService {
     for (final name in knownNames) {
       rollback[name] = await _readEntries(name);
     }
+    final databaseRollback = database == null
+        ? null
+        : await database!.exportDataSnapshot();
     try {
       for (final name in knownNames) {
-        await _writeEntries(name, boxes[name] as List? ?? const []);
+        if (!boxes.containsKey(name) && _optionalBoxNames.contains(name)) {
+          continue;
+        }
+        final imported = boxes[name] as List? ?? const [];
+        final entries = <MapEntry<dynamic, dynamic>>[];
+        final seenKeys = <Object?>{};
+
+        for (final record in imported) {
+          if (record is! Map) {
+            throw FormatException('A record in $name is invalid.');
+          }
+          final key = _decodeJson(record['key']);
+          final rawValue = record['value'];
+          final value = switch (name) {
+            'products_box' => _productFromMap(rawValue as Map),
+            'sales_box' => _saleFromMap(rawValue as Map),
+            _ => _decodeJson(rawValue),
+          };
+          if (name == 'app_settings_box' && value is! bool) {
+            throw const FormatException(
+              'Application seed settings are invalid.',
+            );
+          }
+          if (seenKeys.contains(key)) {
+            continue;
+          }
+          seenKeys.add(key);
+          entries.add(MapEntry(key, value));
+        }
+
+        await _replaceEntries(name, entries);
+      }
+      if (database != null) {
+        if (backup.containsKey('databaseSnapshot')) {
+          await database!.restoreDataSnapshot(backup['databaseSnapshot']);
+        } else {
+          final allProducts = Hive.box<ProductModel>('products_box').values;
+          final allSales = Hive.box<Sale>('sales_box').values;
+          await database!.replaceInventory(
+            products: allProducts,
+            sales: allSales,
+          );
+        }
       }
     } catch (error) {
       final rollbackErrors = <String>[];
@@ -184,6 +250,24 @@ class LocalBackupService {
           rollbackErrors.add('${entry.key}: $rollbackError');
         }
       }
+      if (database != null) {
+        try {
+          if (databaseRollback != null) {
+            await database!.restoreDataSnapshot(databaseRollback);
+          } else {
+            await database!.replaceInventory(
+              products: rollback['products_box']!.map(
+                (entry) => entry.value as ProductModel,
+              ),
+              sales: rollback['sales_box']!.map(
+                (entry) => entry.value as Sale,
+              ),
+            );
+          }
+        } catch (rollbackError) {
+          rollbackErrors.add('database: $rollbackError');
+        }
+      }
       if (rollbackErrors.isNotEmpty) {
         throw StateError(
           'Restore failed ($error), and some previous data could not be restored: '
@@ -192,6 +276,10 @@ class LocalBackupService {
       }
       rethrow;
     }
+  }
+
+  Future<void> replaceBackup(Map<String, dynamic> backup) async {
+    await restoreBackup(backup, replaceExisting: true);
   }
 
   Future<List<MapEntry<dynamic, dynamic>>> _readEntries(String name) async {
@@ -215,27 +303,6 @@ class LocalBackupService {
     }
     final box = await _openDynamicBox(name);
     return [for (final key in box.keys) MapEntry(key, box.get(key))];
-  }
-
-  Future<void> _writeEntries(String name, List records) async {
-    final entries = <MapEntry<dynamic, dynamic>>[];
-    for (final record in records) {
-      if (record is! Map) {
-        throw FormatException('A record in $name is invalid.');
-      }
-      final key = _decodeJson(record['key']);
-      final rawValue = record['value'];
-      final value = switch (name) {
-        'products_box' => _productFromMap(rawValue as Map),
-        'sales_box' => _saleFromMap(rawValue as Map),
-        _ => _decodeJson(rawValue),
-      };
-      if (name == 'app_settings_box' && value is! bool) {
-        throw const FormatException('Application seed settings are invalid.');
-      }
-      entries.add(MapEntry(key, value));
-    }
-    await _replaceEntries(name, entries);
   }
 
   Future<void> _replaceEntries(

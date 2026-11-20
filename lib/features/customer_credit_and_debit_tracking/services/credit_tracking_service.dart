@@ -99,6 +99,7 @@ class CreditTrackingService {
       if (saleId.trim().isEmpty || itemName.trim().isEmpty) {
         throw ArgumentError('A linked sale and item are required.');
       }
+
       if (quantity <= 0 ||
           !unitPrice.isFinite ||
           unitPrice <= 0 ||
@@ -142,9 +143,87 @@ class CreditTrackingService {
     });
   }
 
+  Future<CreditAccount> addTransactionCredit({
+    required CreditCustomer customer,
+    required String saleId,
+    required String itemName,
+    required int quantity,
+    required double originalAmount,
+    required double initialPayment,
+    required DateTime creditDate,
+    required DateTime dueDate,
+  }) {
+    return _serializeWrites(() async {
+      if (saleId.trim().isEmpty) {
+        throw ArgumentError('A linked sale is required.');
+      }
+      final originalCents = _toCents(originalAmount);
+      final paymentCents = _toCents(initialPayment);
+      if (originalCents <= 0 ||
+          paymentCents < 0 ||
+          paymentCents > originalCents ||
+          quantity <= 0 ||
+          _dateOnly(dueDate).isBefore(_dateOnly(creditDate))) {
+        throw ArgumentError('Enter a valid credit amount and payment.');
+      }
+      final customersBox = await _openBox(customersBoxName);
+      if (!customersBox.containsKey(customer.id)) {
+        throw StateError('The selected customer is no longer registered.');
+      }
+      final creditsBox = await _openBox(creditsBoxName);
+      if (creditsBox.values
+          .map((value) => CreditAccount.fromMap(value as Map))
+          .any((credit) => credit.saleId == saleId)) {
+        throw StateError('A credit record already exists for this sale.');
+      }
+      final account = CreditAccount(
+        id: _newId('credit', creditsBox),
+        customerId: customer.id,
+        customerName: customer.fullName,
+        saleId: saleId,
+        itemName: itemName.trim().isEmpty ? 'Credit sale' : itemName.trim(),
+        quantity: quantity,
+        unitPrice: originalCents / 100,
+        originalAmount: originalCents / 100,
+        outstandingBalance: (originalCents - paymentCents) / 100,
+        creditDate: _dateOnly(creditDate),
+        dueDate: _dateOnly(dueDate),
+      );
+      await creditsBox.put(account.id, account.toMap());
+      if (paymentCents > 0) {
+        final paymentsBox = await _openBox(paymentsBoxName);
+        final payment = CreditPayment(
+          id: _newId('payment', paymentsBox),
+          creditId: account.id,
+          customerId: account.customerId,
+          customerName: account.customerName,
+          amount: paymentCents / 100,
+          paymentMethod: 'Cash',
+          paymentDate: creditDate,
+        );
+        await paymentsBox.put(payment.id, payment.toMap());
+      }
+      const ActivityLogService().recordInBackground(
+        description:
+            'Recorded credit sale for ${account.customerName}: ${account.originalAmount}',
+        category: 'Credit',
+        occurredAt: account.creditDate,
+      );
+      return account;
+    });
+  }
+
   Future<void> rollbackCredit(String creditId) {
     return _serializeWrites(() async {
       final box = await _openBox(creditsBoxName);
+      final paymentsBox = await _openBox(paymentsBoxName);
+      final paymentKeys = paymentsBox.keys.where((key) {
+        final stored = paymentsBox.get(key);
+        return stored is Map && (stored['creditId'] as String?) == creditId;
+      }).toList();
+      for (final key in paymentKeys) {
+        await paymentsBox.delete(key);
+      }
       await box.delete(creditId);
     });
   }

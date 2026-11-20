@@ -51,7 +51,7 @@ void main() {
     expect(find.text('Suggested combo'), findsWidgets);
   });
 
-  testWidgets('known products use the reference product photos', (
+  testWidgets('products use colorful monograms instead of photos', (
     tester,
   ) async {
     const productNames = [
@@ -71,27 +71,56 @@ void main() {
       MaterialApp(
         home: Column(
           children: productNames
-              .map((name) => InventoryProductThumbnail(productName: name))
+              .map((name) => InventoryProductMonogram(productName: name))
               .toList(),
         ),
       ),
     );
 
-    final images = tester.widgetList<Image>(find.byType(Image)).toList();
-    expect(images, hasLength(10));
-    expect(images.map((image) => (image.image as AssetImage).assetName), [
-      'assets/product_samples/lucky_pancit_canton.png',
-      'assets/product_samples/fresh_milk.png',
-      'assets/product_samples/gardenia_bread.png',
-      'assets/product_samples/coca_cola.png',
-      'assets/product_samples/century_tuna.png',
-      'assets/product_samples/chips_ahoy.png',
-      'assets/product_samples/milo.png',
-      'assets/product_samples/yakult.png',
-      'assets/product_samples/tide.png',
-      'assets/product_samples/nescafe.png',
-    ]);
-    expect(find.text('C'), findsOneWidget);
+    expect(find.byType(Image), findsNothing);
+    expect(find.text('L'), findsOneWidget);
+    expect(find.text('C'), findsNWidgets(4));
+  });
+
+  testWidgets('inventory alert cards fit a narrow phone without photos', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              InventoryAlertProductCard(
+                product: ProductModel(
+                  id: 'narrow',
+                  name: 'Extra Long Product Name for Small Screens',
+                  quantity: 0,
+                  costPrice: 12,
+                  sellingPrice: 18,
+                  category: 'Packaged Household Goods',
+                  minStock: 8,
+                ),
+                status: 'OUT OF STOCK',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Image), findsNothing);
+    expect(
+      find.text('Extra Long Product Name for Small Screens'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(
@@ -158,7 +187,7 @@ void main() {
       expect(find.text('Slow product 0'), findsOneWidget);
       expect(find.text('+ Fast product'), findsWidgets);
       expect(find.text('Accept combo'), findsWidgets);
-      expect(find.byType(InventoryProductThumbnail), findsWidgets);
+      expect(find.byType(InventoryProductMonogram), findsWidgets);
 
       await tester.tap(find.text('Edit combo').first);
       await tester.pumpAndSettle();

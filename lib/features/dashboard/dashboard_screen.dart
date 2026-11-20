@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/app_database.dart';
 import '../../core/theme/app_theme.dart';
 import '../../legacy_main.dart' as legacy;
 import '../inventory_alerts_and_smart_suggestions/screens/inventory_alerts_screen.dart';
@@ -9,6 +10,7 @@ import '../sales/domain/sale_repository.dart';
 import '../sales_management/screens/sales_in_one_screen.dart';
 import '../reports/screens/reports_screen.dart';
 import '../settings/controllers/app_settings_controller.dart';
+import '../settings/services/local_backup_service.dart';
 import '../settings/screens/settings_screen.dart';
 import 'widgets/quick_action_button.dart';
 import 'widgets/recent_transaction_item.dart';
@@ -17,12 +19,14 @@ import 'widgets/summary_card.dart';
 class DashboardScreen extends StatefulWidget {
   final ProductController? productController;
   final SaleRepository? saleRepository;
+  final AppDatabase? database;
   final AppSettingsController? settingsController;
 
   const DashboardScreen({
     super.key,
     this.productController,
     this.saleRepository,
+    this.database,
     this.settingsController,
   });
 
@@ -119,13 +123,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
         saleRepository: widget.saleRepository,
         products: widget.productController?.state.products ?? const [],
         productController: widget.productController,
+        businessName: widget.settingsController?.profile.storeName ?? '',
+        preparedBy: widget.settingsController?.profile.ownerName ?? '',
       ),
       widget.settingsController == null
           ? const _PlaceholderPage(
               title: 'More',
               message: 'Settings are unavailable in this app instance.',
             )
-          : SettingsScreen(controller: widget.settingsController!),
+          : SettingsScreen(
+              controller: widget.settingsController!,
+              backupService: widget.database == null
+                  ? const LocalBackupService()
+                  : LocalBackupService(database: widget.database),
+              onDataRestored: widget.productController == null
+                  ? null
+                  : () => widget.productController!.loadProducts(),
+            ),
     ];
 
     return Scaffold(
@@ -445,6 +459,17 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
     final lowStockCount = widget.products
         .where((product) => product.isLowStock)
         .length;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final summaryColumns = screenWidth >= 900
+        ? 4
+        : screenWidth >= 600
+        ? 3
+        : 2;
+    final quickActionColumns = screenWidth >= 600 ? 3 : 2;
+    final summaryCardWidth =
+        (screenWidth - 40 - 14 * (summaryColumns - 1)) / summaryColumns;
+    final quickActionCardWidth =
+        (screenWidth - 40 - 12 * (quickActionColumns - 1)) / quickActionColumns;
 
     final summaryCards = [
       SummaryCard(
@@ -495,10 +520,12 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
             _buildSectionTitle('Business Overview'),
             const SizedBox(height: 12),
             GridView.count(
-              crossAxisCount: 2,
+              crossAxisCount: summaryColumns,
               mainAxisSpacing: 14,
               crossAxisSpacing: 14,
-              childAspectRatio: 1.5,
+              childAspectRatio: (summaryCardWidth / 185)
+                  .clamp(0.68, 1.8)
+                  .toDouble(),
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               children: summaryCards,
@@ -507,10 +534,12 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
             _buildSectionTitle('Quick Actions'),
             const SizedBox(height: 12),
             GridView.count(
-              crossAxisCount: 2,
+              crossAxisCount: quickActionColumns,
               mainAxisSpacing: 12,
               crossAxisSpacing: 12,
-              childAspectRatio: 1.15,
+              childAspectRatio: (quickActionCardWidth / 138)
+                  .clamp(0.85, 1.9)
+                  .toDouble(),
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               children: [
@@ -573,11 +602,12 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
     String formattedDate,
     void Function(BuildContext context, String message) showMessage,
   ) {
+    final compact = MediaQuery.sizeOf(context).width < 380;
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: EdgeInsets.all(compact ? 14 : 18),
       decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(28),
+        color: AppColors.forestGreen,
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
             color: AppColors.forestGreen.withValues(alpha: 0.08),
@@ -591,19 +621,19 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
           Row(
             children: [
               Container(
-                width: 52,
-                height: 52,
+                width: compact ? 44 : 48,
+                height: compact ? 44 : 48,
                 decoration: BoxDecoration(
-                  color: AppColors.softGreen,
+                  color: Colors.white.withValues(alpha: 0.16),
                   borderRadius: BorderRadius.circular(18),
                 ),
                 child: const Icon(
                   Icons.storefront_rounded,
-                  color: AppColors.forestGreen,
+                  color: Colors.white,
                   size: 28,
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: compact ? 8 : 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -611,9 +641,9 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
                     Text(
                       'Bizniz Tracker',
                       style: TextStyle(
-                        fontSize: 22,
+                        fontSize: compact ? 18 : 21,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.charcoal,
+                        color: Colors.white,
                       ),
                     ),
                     Text(
@@ -621,7 +651,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
-                        color: AppColors.grey,
+                        color: Colors.white.withValues(alpha: 0.78),
                       ),
                     ),
                   ],
@@ -630,20 +660,32 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
               Row(
                 children: [
                   IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(
+                      width: 38,
+                      height: 40,
+                    ),
                     onPressed: () => showMessage(
                       context,
                       'Notifications feature is being developed.',
                     ),
-                    icon: Icon(
+                    icon: const Icon(
                       Icons.notifications_none_rounded,
-                      color: AppColors.charcoal,
+                      color: Colors.white,
                     ),
                   ),
                   IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(
+                      width: 38,
+                      height: 40,
+                    ),
                     onPressed: () => widget.onNavigate(4),
-                    icon: Icon(
+                    icon: const Icon(
                       Icons.settings_outlined,
-                      color: AppColors.charcoal,
+                      color: Colors.white,
                     ),
                   ),
                 ],
@@ -652,33 +694,38 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
           ),
           const SizedBox(height: 18),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Good day, Business Owner!',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.charcoal,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Good day, Business Owner!',
+                      style: TextStyle(
+                        fontSize: compact ? 14 : 16,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
                     ),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    'Operational overview · $formattedDate',
-                    style: TextStyle(fontSize: 12, color: AppColors.grey),
-                  ),
-                ],
+                    const SizedBox(height: 4),
+                    Text(
+                      'Operational overview · $formattedDate',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.white.withValues(alpha: 0.78),
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
+                padding: EdgeInsets.symmetric(
+                  horizontal: compact ? 7 : 10,
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.softGreen,
+                  color: Colors.white.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
@@ -686,15 +733,15 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
                     const Icon(
                       Icons.cloud_off_rounded,
                       size: 16,
-                      color: AppColors.warning,
+                      color: AppColors.gold,
                     ),
                     const SizedBox(width: 6),
                     Text(
                       'Sample data',
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: compact ? 10 : 11,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.charcoal,
+                        color: Colors.white,
                       ),
                     ),
                   ],
@@ -719,8 +766,38 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
   }
 
   Widget _buildSalesOverviewCard(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 380;
+    final periodSelector = compact
+        ? SizedBox(
+            width: 96,
+            child: DropdownButton<String>(
+              value: _salesPeriod,
+              isDense: true,
+              isExpanded: true,
+              items: const [
+                DropdownMenuItem(value: 'Daily', child: Text('Daily')),
+                DropdownMenuItem(value: 'Weekly', child: Text('Weekly')),
+                DropdownMenuItem(value: 'Monthly', child: Text('Monthly')),
+              ],
+              onChanged: (period) {
+                if (period != null) setState(() => _salesPeriod = period);
+              },
+            ),
+          )
+        : SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'Daily', label: Text('Daily')),
+              ButtonSegment(value: 'Weekly', label: Text('Weekly')),
+              ButtonSegment(value: 'Monthly', label: Text('Monthly')),
+            ],
+            selected: {_salesPeriod},
+            onSelectionChanged: (selection) {
+              setState(() => _salesPeriod = selection.first);
+            },
+            showSelectedIcon: false,
+          );
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: EdgeInsets.all(compact ? 14 : 18),
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(24),
@@ -738,26 +815,20 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Sales Overview',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.charcoal,
+              Expanded(
+                child: Text(
+                  'Sales Overview',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: compact ? 16 : 18,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.charcoal,
+                  ),
                 ),
               ),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'Daily', label: Text('Daily')),
-                  ButtonSegment(value: 'Weekly', label: Text('Weekly')),
-                  ButtonSegment(value: 'Monthly', label: Text('Monthly')),
-                ],
-                selected: {_salesPeriod},
-                onSelectionChanged: (selection) {
-                  setState(() => _salesPeriod = selection.first);
-                },
-                showSelectedIcon: false,
-              ),
+              if (compact) const SizedBox(width: 8),
+              periodSelector,
             ],
           ),
           const SizedBox(height: 18),
@@ -780,16 +851,23 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Total sales',
-                style: TextStyle(fontSize: 13, color: AppColors.grey),
+              Expanded(
+                child: Text(
+                  'Total sales',
+                  style: TextStyle(fontSize: 13, color: AppColors.grey),
+                ),
               ),
-              Text(
-                '₱5,250.00',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.charcoal,
+              Flexible(
+                child: Text(
+                  '₱5,250.00',
+                  textAlign: TextAlign.end,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: compact ? 17 : 20,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.charcoal,
+                  ),
                 ),
               ),
             ],
@@ -798,16 +876,23 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Transactions',
-                style: TextStyle(fontSize: 13, color: AppColors.grey),
+              Expanded(
+                child: Text(
+                  'Transactions',
+                  style: TextStyle(fontSize: 13, color: AppColors.grey),
+                ),
               ),
-              Text(
-                '48 sales',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.forestGreen,
+              Flexible(
+                child: Text(
+                  '48 sales',
+                  textAlign: TextAlign.end,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.forestGreen,
+                  ),
                 ),
               ),
             ],
@@ -818,8 +903,9 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
   }
 
   Widget _buildInventoryAlertsCard(BuildContext context, int lowStockCount) {
+    final compact = MediaQuery.sizeOf(context).width < 380;
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: EdgeInsets.all(compact ? 14 : 18),
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(24),
@@ -830,16 +916,24 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Inventory Alerts',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.charcoal,
+              Expanded(
+                child: Text(
+                  'Inventory Alerts',
+                  style: TextStyle(
+                    fontSize: compact ? 16 : 18,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.charcoal,
+                  ),
                 ),
               ),
               TextButton(
                 onPressed: widget.onOpenInventoryAlerts,
+                style: compact
+                    ? TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        visualDensity: VisualDensity.compact,
+                      )
+                    : null,
                 child: const Text('View All'),
               ),
             ],
@@ -864,8 +958,9 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
   }
 
   Widget _buildPerformanceCard() {
+    final compact = MediaQuery.sizeOf(context).width < 380;
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: EdgeInsets.all(compact ? 14 : 18),
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(24),
@@ -907,8 +1002,9 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
   }
 
   Widget _buildSuggestionsCard() {
+    final compact = MediaQuery.sizeOf(context).width < 380;
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: EdgeInsets.all(compact ? 14 : 18),
       decoration: BoxDecoration(
         color: AppColors.softGreen,
         borderRadius: BorderRadius.circular(24),
@@ -931,6 +1027,12 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
               ),
               TextButton(
                 onPressed: widget.onOpenSuggestions,
+                style: compact
+                    ? TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        visualDensity: VisualDensity.compact,
+                      )
+                    : null,
                 child: const Text('View Suggestions'),
               ),
             ],
@@ -946,6 +1048,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
   }
 
   Widget _buildRecentTransactionsCard(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 380;
     final transactions = [
       const RecentTransactionItem(
         receiptNumber: 'BZT-1045',
@@ -974,30 +1077,56 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
     ];
 
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: EdgeInsets.all(compact ? 14 : 18),
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(24),
       ),
       child: Column(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Recent Transactions',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.charcoal,
+          if (compact)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Recent Transactions',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.charcoal,
+                  ),
                 ),
-              ),
-              TextButton(
-                onPressed: () => widget.onNavigate(2),
-                child: const Text('View All Transactions'),
-              ),
-            ],
-          ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => widget.onNavigate(2),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    child: const Text('View All Transactions'),
+                  ),
+                ),
+              ],
+            )
+          else
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Recent Transactions',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.charcoal,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => widget.onNavigate(2),
+                  child: const Text('View All Transactions'),
+                ),
+              ],
+            ),
           const SizedBox(height: 8),
           Column(children: transactions),
         ],

@@ -66,10 +66,37 @@ void main() {
       );
       await _scan(tester, 'MILK-123');
       expect(find.textContaining('1 in cart'), findsOneWidget);
+      await tester.tap(find.byTooltip('Remove Fresh Milk from cart'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('1 in cart'), findsNothing);
+      await _scan(tester, 'MILK-123');
+      expect(find.textContaining('1 in cart'), findsOneWidget);
 
       await tester.tap(find.textContaining('Cart (1)'));
       await tester.pumpAndSettle();
       expect(find.text('Shopping Cart'), findsOneWidget);
+      await tester.tap(find.byTooltip('Remove Fresh Milk'));
+      await tester.pumpAndSettle();
+      expect(find.text('Your cart is empty.'), findsOneWidget);
+      await tester.tap(find.byTooltip('Back to products'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('1 in cart'), findsNothing);
+
+      await _scan(tester, 'MILK-123');
+      await tester.tap(find.textContaining('Cart (1)'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Clear cart'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Clear Cart'));
+      await tester.pumpAndSettle();
+      expect(find.text('Your cart is empty.'), findsOneWidget);
+      await tester.tap(find.byTooltip('Back to products'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('1 in cart'), findsNothing);
+
+      await _scan(tester, 'MILK-123');
+      await tester.tap(find.textContaining('Cart (1)'));
+      await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Increase quantity'));
       await tester.pumpAndSettle();
       expect(find.text('2'), findsWidgets);
@@ -77,6 +104,8 @@ void main() {
       await tester.tap(find.textContaining('Proceed to Payment'));
       await tester.pumpAndSettle();
       expect(find.text('Payment'), findsOneWidget);
+      expect(find.text('Details of Tutor'), findsNothing);
+      expect(find.text('Amount Received'), findsOneWidget);
       await tester.enterText(find.byKey(const ValueKey('amount-paid')), '10');
       await tester.ensureVisible(find.text('Complete Sale'));
       await tester.tap(find.text('Complete Sale'));
@@ -102,7 +131,7 @@ void main() {
 
       await tester.tap(find.text('Done'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('2 in stock'), findsOneWidget);
+      expect(find.textContaining('Stock: 2'), findsOneWidget);
       expect(find.textContaining('Cart (0)'), findsNothing);
 
       await tester.tap(find.byTooltip('Sales history'));

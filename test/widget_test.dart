@@ -6,6 +6,7 @@ import 'package:hive/hive.dart';
 
 import 'package:bizniz_tracker/app.dart';
 import 'package:bizniz_tracker/core/failure.dart';
+import 'package:bizniz_tracker/core/theme/app_theme.dart';
 import 'package:bizniz_tracker/features/dashboard/dashboard_screen.dart';
 import 'package:bizniz_tracker/features/products/domain/product.dart';
 import 'package:bizniz_tracker/features/products/domain/repositories.dart';
@@ -13,6 +14,7 @@ import 'package:bizniz_tracker/features/products/presentation/controllers.dart';
 import 'package:bizniz_tracker/features/sales/domain/sale.dart';
 import 'package:bizniz_tracker/features/sales/domain/sale_repository.dart';
 import 'package:dartz/dartz.dart';
+import 'package:bizniz_tracker/legacy_main.dart' as legacy;
 
 void main() {
   late Directory directory;
@@ -26,6 +28,73 @@ void main() {
   tearDownAll(() async {
     await Hive.close();
     await directory.delete(recursive: true);
+  });
+
+  testWidgets('dashboard fits a narrow mobile viewport', (tester) async {
+    tester.view.physicalSize = const Size(320, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final controller = ProductController(
+      repository: _FakeProductRepository(),
+      activityLog: null,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.buildTheme(),
+        home: DashboardScreen(productController: controller),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Bizniz Tracker'), findsOneWidget);
+  });
+
+  testWidgets('inventory overview and product cards fit narrow screens', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final controller =
+        ProductController(
+            repository: _FakeProductRepository(),
+            activityLog: null,
+          )
+          ..state = ProductState(
+            products: [
+              ProductModel(
+                id: 'mineral-water',
+                name: 'Mineral Water Long Bottle Name',
+                quantity: 5,
+                costPrice: 12,
+                sellingPrice: 20,
+                category: 'Beverages',
+                minStock: 10,
+              ),
+            ],
+          );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.buildTheme(),
+        home: legacy.InventoryManagementScreen(
+          productController: controller,
+          onRefresh: () {},
+          onOpenInventoryAlerts: () {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Inventory Overview'), findsOneWidget);
+    expect(find.text('Mineral Water Long Bottle Name'), findsOneWidget);
+    expect(find.text('Low stock'), findsNWidgets(2));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('dashboard View All opens the inventory alert screen', (
@@ -233,13 +302,15 @@ void main() {
     expect(find.text('Credit and Debit Tracking'), findsOneWidget);
     await tester.tap(find.text('View all sales summary'));
     await tester.pumpAndSettle();
-    expect(find.text('Daily Summary'), findsOneWidget);
-    expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey('summary-transaction-count')))
-          .data,
-      '1',
-    );
+    expect(find.textContaining('Completed sales'), findsOneWidget);
+    expect(find.textContaining('1 transaction'), findsOneWidget);
+    expect(find.textContaining('3 items'), findsOneWidget);
+    expect(find.textContaining('40.00'), findsOneWidget);
+    expect(find.text('Bread'), findsOneWidget);
+    expect(find.textContaining('2 sold'), findsOneWidget);
+    expect(find.text('Milk'), findsOneWidget);
+    expect(find.textContaining('1 sold'), findsOneWidget);
+
   });
 }
 

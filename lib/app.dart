@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'core/app_database.dart';
 import 'core/theme/app_theme.dart';
 import 'features/dashboard/dashboard_screen.dart';
 import 'features/products/presentation/controllers.dart';
@@ -9,12 +10,14 @@ import 'features/settings/controllers/app_settings_controller.dart';
 class BiznizTrackerApp extends StatelessWidget {
   final ProductController? productController;
   final SaleRepository? saleRepository;
+  final AppDatabase? database;
   final AppSettingsController settingsController;
 
   BiznizTrackerApp({
     super.key,
     this.productController,
     this.saleRepository,
+    this.database,
     AppSettingsController? settingsController,
   }) : settingsController = settingsController ?? AppSettingsController();
 
@@ -31,6 +34,7 @@ class BiznizTrackerApp extends StatelessWidget {
         home: DashboardScreen(
           productController: productController,
           saleRepository: saleRepository,
+          database: database,
           settingsController: settingsController,
         ),
       ),

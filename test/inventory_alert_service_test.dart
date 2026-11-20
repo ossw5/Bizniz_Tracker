@@ -105,11 +105,19 @@ void main() {
     expect(results.map((entry) => entry.value), [5, 2]);
   });
 
-  test('builds slow and fast moving combo suggestions from sales', () {
-    final products = [lowStock, healthy];
+  test('builds product combos from repeated shared transactions', () {
+    final fastMoving = ProductModel(
+      id: 'fast',
+      name: 'Fast product',
+      quantity: 20,
+      costPrice: 1,
+      sellingPrice: 2,
+    );
+    final products = [lowStock, healthy, outOfStock, fastMoving];
     final sales = [
       Sale(
-        id: 'old-sale',
+        id: 'old-low',
+        transactionId: 'old-transaction-1',
         productId: lowStock.id,
         quantitySold: 1,
         sellingPrice: 2,
@@ -117,12 +125,67 @@ void main() {
         totalRevenue: 2,
       ),
       Sale(
-        id: 'recent-sale',
+        id: 'old-healthy',
+        transactionId: 'old-transaction-1',
         productId: healthy.id,
+        quantitySold: 1,
+        sellingPrice: 2,
+        saleDate: now.subtract(const Duration(days: 35)),
+        totalRevenue: 2,
+      ),
+      Sale(
+        id: 'old-low-repeat',
+        transactionId: 'old-transaction-2',
+        productId: lowStock.id,
+        quantitySold: 1,
+        sellingPrice: 2,
+        saleDate: now.subtract(const Duration(days: 34)),
+        totalRevenue: 2,
+      ),
+      Sale(
+        id: 'old-healthy-repeat',
+        transactionId: 'old-transaction-2',
+        productId: healthy.id,
+        quantitySold: 1,
+        sellingPrice: 2,
+        saleDate: now.subtract(const Duration(days: 34)),
+        totalRevenue: 2,
+      ),
+      Sale(
+        id: 'recent-healthy',
+        transactionId: 'recent-transaction-1',
+        productId: fastMoving.id,
         quantitySold: 5,
         sellingPrice: 2,
         saleDate: now.subtract(const Duration(days: 2)),
         totalRevenue: 10,
+      ),
+      Sale(
+        id: 'recent-out',
+        transactionId: 'recent-transaction-1',
+        productId: outOfStock.id,
+        quantitySold: 2,
+        sellingPrice: 2,
+        saleDate: now.subtract(const Duration(days: 2)),
+        totalRevenue: 4,
+      ),
+      Sale(
+        id: 'recent-healthy-repeat',
+        transactionId: 'recent-transaction-2',
+        productId: fastMoving.id,
+        quantitySold: 5,
+        sellingPrice: 2,
+        saleDate: now.subtract(const Duration(days: 1)),
+        totalRevenue: 10,
+      ),
+      Sale(
+        id: 'recent-out-repeat',
+        transactionId: 'recent-transaction-2',
+        productId: outOfStock.id,
+        quantitySold: 2,
+        sellingPrice: 2,
+        saleDate: now.subtract(const Duration(days: 1)),
+        totalRevenue: 4,
       ),
     ];
 
@@ -139,11 +202,22 @@ void main() {
       now: now,
     );
 
-    expect(slowSuggestions.single.featuredProduct, lowStock);
-    expect(slowSuggestions.single.pairedProduct, healthy);
+    expect(
+      {
+        slowSuggestions.single.featuredProduct,
+        slowSuggestions.single.pairedProduct,
+      },
+      {lowStock, healthy},
+    );
     expect(slowSuggestions.single.comboPrice, 3.6);
-    expect(fastSuggestions.single.featuredProduct, healthy);
-    expect(fastSuggestions.single.pairedProduct, lowStock);
+    expect(fastSuggestions.single.transactionsTogether, 2);
+    expect(
+      {
+        fastSuggestions.single.featuredProduct,
+        fastSuggestions.single.pairedProduct,
+      },
+      {fastMoving, outOfStock},
+    );
     expect(
       service.comboSuggestions(
         products: products,

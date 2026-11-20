@@ -4,6 +4,8 @@ import '../../products/domain/product.dart';
 import '../../products/presentation/controllers.dart';
 import '../../sales/domain/sale.dart';
 import '../../sales/domain/sale_repository.dart';
+import '../../product_and_inventory_management/models/expiration_model.dart';
+import '../../product_and_inventory_management/services/expiration_service.dart';
 import '../models/inventory_alerts_data.dart';
 import '../services/inventory_alert_service.dart';
 import '../widgets/inventory_alert_product_card.dart';
@@ -44,6 +46,7 @@ class _InventoryAlertsScreenState extends State<InventoryAlertsScreen>
 
   late final TabController _tabController;
   late Future<List<Sale>> _salesFuture;
+  late Future<List<ExpirationModel>> _expirationFuture;
   String _searchTerm = '';
   String _selectedPeriod = 'THIS WEEK';
   InventorySuggestionType _selectedSuggestionType =
@@ -60,10 +63,14 @@ class _InventoryAlertsScreenState extends State<InventoryAlertsScreen>
       vsync: this,
     );
     _salesFuture = _loadSales();
+    _expirationFuture = _loadExpirations();
   }
 
   Future<List<Sale>> _loadSales() =>
       widget.saleRepository?.getAllSales() ?? Future<List<Sale>>.value([]);
+
+  Future<List<ExpirationModel>> _loadExpirations() => const ExpirationService()
+      .loadAll(products: widget.productController?.state.products);
 
   @override
   void dispose() {
@@ -140,23 +147,87 @@ class _InventoryAlertsScreenState extends State<InventoryAlertsScreen>
     );
   }
 
-  Widget _expirationTab() => Padding(
-    padding: const EdgeInsets.all(16),
-    child: Column(
-      children: [
-        const _AlertBanner(
-          color: Colors.amber,
-          icon: Icons.calendar_today_rounded,
-          title: 'Expiration tracking is not configured',
+  Widget _expirationTab() => FutureBuilder<List<ExpirationModel>>(
+    future: _expirationFuture,
+    builder: (context, snapshot) {
+      if (snapshot.hasError) {
+        return _emptyMessage(
+          'Could not load expiration records: ${snapshot.error}',
+        );
+      }
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      final alerts =
+          (snapshot.data ?? const <ExpirationModel>[])
+              .where(
+                (record) =>
+                    record.status == ExpirationStatus.nearingExpiration ||
+                    record.status == ExpirationStatus.expired,
+              )
+              .toList()
+            ..sort((first, second) {
+              final status = first.status.index.compareTo(second.status.index);
+              return status != 0
+                  ? status
+                  : first.expirationDate.compareTo(second.expirationDate);
+            });
+      final expiredCount = alerts
+          .where((record) => record.status == ExpirationStatus.expired)
+          .length;
+      final nearingCount = alerts.length - expiredCount;
+
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            _AlertBanner(
+              color: expiredCount > 0 ? Colors.red : Colors.amber,
+              icon: Icons.calendar_today_rounded,
+              title: alerts.isEmpty
+                  ? 'No batches are expired or nearing expiration'
+                  : '$expiredCount expired · $nearingCount nearing expiration',
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: alerts.isEmpty
+                  ? _emptyMessage(
+                      'Add expiration batches to inventory to see upcoming and expired products here.',
+                    )
+                  : ListView(
+                      children: [
+                        for (final record in alerts)
+                          Card(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            child: ListTile(
+                              leading: Icon(
+                                record.status == ExpirationStatus.expired
+                                    ? Icons.event_busy_rounded
+                                    : Icons.event_available_rounded,
+                                color: record.status.color,
+                              ),
+                              title: Text(record.productName),
+                              subtitle: Text(
+                                'Batch ${record.batchIdentifier} · '
+                                '${record.remainingQuantity} remaining · '
+                                'Expires ${MaterialLocalizations.of(context).formatMediumDate(record.expirationDate)}',
+                              ),
+                              trailing: Text(
+                                record.status.shortLabel,
+                                style: TextStyle(
+                                  color: record.status.color,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+            ),
+          ],
         ),
-        const SizedBox(height: 12),
-        Expanded(
-          child: _emptyMessage(
-            'Products do not currently store batch or expiration dates, so expiration alerts cannot be calculated yet.',
-          ),
-        ),
-      ],
-    ),
+      );
+    },
   );
 
   Widget _salesTab(List<ProductModel> products, {required bool slowMoving}) {
@@ -345,13 +416,13 @@ class _InventoryAlertsScreenState extends State<InventoryAlertsScreen>
               const SizedBox(height: 8),
               if (_selectedSuggestionType == InventorySuggestionType.expiration)
                 _emptyMessage(
-                  'Expiration dates are not recorded for products yet, so expiration-based suggestions are not available.',
+                  'Expiration alerts are available in the Expiration tab. '
+                  'Record batch dates to track upcoming and expired products.',
                 )
               else if (suggestions.isEmpty)
                 _emptyMessage(
-                  _selectedSuggestionType == InventorySuggestionType.slowMoving
-                      ? 'No slow-moving products with sales history are ready for a combo suggestion.'
-                      : 'No fast-moving products with recent sales are ready for a combo suggestion.',
+                  'More sales history is needed. A product pair must appear '
+                  'together in at least two transactions before a suggestion is shown.',
                 )
               else
                 ...suggestions.map(
@@ -380,9 +451,9 @@ class _InventoryAlertsScreenState extends State<InventoryAlertsScreen>
 
   String _suggestionHeader(InventorySuggestionType type) => switch (type) {
     InventorySuggestionType.slowMoving =>
-      'Pair slow-moving products with popular items',
+      'Products frequently bought with slow-moving items',
     InventorySuggestionType.fastMoving =>
-      'Bundle popular products to increase basket size',
+      'Products frequently bought with recent best sellers',
     InventorySuggestionType.expiration => 'Expiration-based suggestions',
   };
 
@@ -412,7 +483,10 @@ class _InventoryAlertsScreenState extends State<InventoryAlertsScreen>
     final controller = widget.productController;
     if (controller != null) await controller.loadProducts();
     if (!mounted) return;
-    setState(() => _salesFuture = _loadSales());
+    setState(() {
+      _salesFuture = _loadSales();
+      _expirationFuture = _loadExpirations();
+    });
   }
 
   Future<void> _addProduct() async {
@@ -441,7 +515,9 @@ class _InventoryAlertsScreenState extends State<InventoryAlertsScreen>
   @override
   Widget build(BuildContext context) {
     final state = widget.productController?.state;
-    final products = state?.products ?? const <ProductModel>[];
+    final products = (state?.products ?? const <ProductModel>[])
+        .where((product) => !product.id.startsWith('reference-'))
+        .toList(growable: false);
     final tabs = [
       _lowStockTab(products),
       _expirationTab(),
@@ -732,6 +808,13 @@ class _ComboSuggestionCard extends StatelessWidget {
               ],
             ),
             const Divider(height: 20),
+            if (suggestion.transactionsTogether > 0) ...[
+              Text(
+                'Purchased together in ${suggestion.transactionsTogether} transactions',
+                style: theme.textTheme.bodySmall,
+              ),
+              const SizedBox(height: 8),
+            ],
             Row(
               children: [
                 Expanded(

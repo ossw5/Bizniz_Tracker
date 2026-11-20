@@ -1,17 +1,27 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_database.dart';
+import '../../core/formatters.dart';
 import '../../core/theme/app_theme.dart';
 import '../../legacy_main.dart' as legacy;
+import '../customer_credit_and_debit_tracking/screens/credit_debit_tracking_screen.dart';
+import '../customer_credit_and_debit_tracking/services/credit_tracking_service.dart';
+import '../expense_tracking/screens/expense_tracking_screen.dart';
+import '../expense_tracking/services/expense_service.dart';
+import '../inventory_alerts_and_smart_suggestions/services/inventory_alert_service.dart';
 import '../inventory_alerts_and_smart_suggestions/screens/inventory_alerts_screen.dart';
+import '../product_and_inventory_management/services/expiration_service.dart';
 import '../products/domain/product.dart';
 import '../products/presentation/controllers.dart';
+import '../sales/domain/sale.dart';
 import '../sales/domain/sale_repository.dart';
+import '../sales_management/screens/sales_history_screen.dart';
 import '../sales_management/screens/sales_in_one_screen.dart';
 import '../reports/screens/reports_screen.dart';
 import '../settings/controllers/app_settings_controller.dart';
 import '../settings/services/local_backup_service.dart';
 import '../settings/screens/settings_screen.dart';
+import 'dashboard_data.dart';
 import 'widgets/quick_action_button.dart';
 import 'widgets/recent_transaction_item.dart';
 import 'widgets/summary_card.dart';
@@ -34,10 +44,32 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen>
+    with WidgetsBindingObserver {
   int _currentIndex = 0;
   bool _showInventoryAlerts = false;
   int _inventoryAlertsInitialTab = 0;
+  int _refreshVersion = 0;
+  int _scanRequestVersion = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      setState(() => _refreshVersion++);
+    }
+  }
 
   static const List<NavigationDestination> _destinations = [
     NavigationDestination(
@@ -70,7 +102,70 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _handleNavigate(int index) {
     setState(() {
       _currentIndex = index;
+      if (index == 0) _refreshVersion++;
       if (index != 1) _showInventoryAlerts = false;
+    });
+  }
+
+  Future<void> _openExpenseTracking() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => ExpenseTrackingScreen(
+          saleRepository: widget.saleRepository,
+          products: widget.productController?.state.products ?? const [],
+          businessName: widget.settingsController?.profile.storeName ?? '',
+          preparedBy: widget.settingsController?.profile.ownerName ?? '',
+        ),
+      ),
+    );
+    if (!mounted) return;
+    setState(() {
+      _currentIndex = 0;
+      _refreshVersion++;
+    });
+  }
+
+  Future<void> _openCreditTracking() async {
+    final controller = widget.productController;
+    final repository = widget.saleRepository;
+    if (controller == null || repository == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => CreditDebitTrackingScreen(
+          productController: controller,
+          saleRepository: repository,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    setState(() {
+      _currentIndex = 0;
+      _refreshVersion++;
+    });
+  }
+
+  Future<void> _openTransactions() async {
+    final repository = widget.saleRepository;
+    if (repository == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => SalesHistoryScreen(
+          saleRepository: repository,
+          products: widget.productController?.state.products ?? const [],
+        ),
+      ),
+    );
+    if (!mounted) return;
+    setState(() {
+      _currentIndex = 0;
+      _refreshVersion++;
+    });
+  }
+
+  void _scanBarcode() {
+    setState(() {
+      _currentIndex = 2;
+      _scanRequestVersion++;
     });
   }
 
@@ -94,6 +189,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _HomeDashboardPage(
         onNavigate: (index) => _handleNavigate(index),
         products: widget.productController?.state.products ?? const [],
+        productController: widget.productController,
+        saleRepository: widget.saleRepository,
+        refreshVersion: _refreshVersion,
+        onOpenExpenses: _openExpenseTracking,
+        onOpenCredit: _openCreditTracking,
+        onOpenTransactions: _openTransactions,
+        onScanBarcode: _scanBarcode,
         onOpenInventoryAlerts: () => _openInventoryAlerts(),
         onOpenSuggestions: () => _openInventoryAlerts(initialTabIndex: 4),
       ),
@@ -118,6 +220,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           : SalesInOneScreen(
               productController: widget.productController!,
               saleRepository: widget.saleRepository!,
+              scanRequestVersion: _scanRequestVersion,
             ),
       ReportsScreen(
         saleRepository: widget.saleRepository,
@@ -424,12 +527,26 @@ class _InventoryAlertsPageState extends State<_InventoryAlertsPage> {
 class _HomeDashboardPage extends StatefulWidget {
   final ValueChanged<int> onNavigate;
   final List<ProductModel> products;
+  final ProductController? productController;
+  final SaleRepository? saleRepository;
+  final int refreshVersion;
+  final VoidCallback onOpenExpenses;
+  final VoidCallback onOpenCredit;
+  final VoidCallback onOpenTransactions;
+  final VoidCallback onScanBarcode;
   final VoidCallback onOpenInventoryAlerts;
   final VoidCallback onOpenSuggestions;
 
   const _HomeDashboardPage({
     required this.onNavigate,
     required this.products,
+    required this.productController,
+    required this.saleRepository,
+    required this.refreshVersion,
+    required this.onOpenExpenses,
+    required this.onOpenCredit,
+    required this.onOpenTransactions,
+    required this.onScanBarcode,
     required this.onOpenInventoryAlerts,
     required this.onOpenSuggestions,
   });
@@ -440,6 +557,50 @@ class _HomeDashboardPage extends StatefulWidget {
 
 class _HomeDashboardPageState extends State<_HomeDashboardPage> {
   String _salesPeriod = 'Daily';
+  late Future<DashboardData> _dashboardData;
+
+  @override
+  void initState() {
+    super.initState();
+    _dashboardData = _loadDashboardData();
+  }
+
+  @override
+  void didUpdateWidget(covariant _HomeDashboardPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshVersion != widget.refreshVersion ||
+        !identical(oldWidget.products, widget.products)) {
+      _dashboardData = _loadDashboardData(refreshProducts: true);
+    }
+  }
+
+  Future<DashboardData> _loadDashboardData({
+    bool refreshProducts = false,
+  }) async {
+    final controller = widget.productController;
+    var products = controller?.state.products ?? widget.products;
+    if (refreshProducts && controller != null) {
+      final result = await controller.repository.getAllProducts();
+      products = result.fold(
+        (failure) =>
+            throw StateError('Could not refresh inventory: ${failure.message}'),
+        (loadedProducts) => loadedProducts,
+      );
+    }
+    final sales = await widget.saleRepository?.getAllSales() ?? const <Sale>[];
+    final expenses = await const ExpenseService().loadAll();
+    final expirationRecords = await const ExpirationService().loadAll(
+      products: products,
+    );
+    final credits = await const CreditTrackingService().loadCredits();
+    return DashboardData.fromRecords(
+      products: products,
+      sales: sales,
+      expenses: expenses,
+      expirationRecords: expirationRecords,
+      creditAccounts: credits,
+    );
+  }
 
   void _showMessage(BuildContext context, String message) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -454,11 +615,54 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
+    return FutureBuilder<DashboardData>(
+      future: _dashboardData,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return SafeArea(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline_rounded, size: 36),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Could not load dashboard data: ${snapshot.error}',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _dashboardData = _loadDashboardData(
+                            refreshProducts: true,
+                          );
+                        });
+                      },
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+        if (!snapshot.hasData) {
+          return const SafeArea(
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return _buildDashboardContent(context, snapshot.data!);
+      },
+    );
+  }
+
+  Widget _buildDashboardContent(BuildContext context, DashboardData data) {
+    final now = data.calculatedAt;
     final formattedDate = '${_monthName(now.month)} ${now.day}, ${now.year}';
-    final lowStockCount = widget.products
-        .where((product) => product.isLowStock)
-        .length;
     final screenWidth = MediaQuery.sizeOf(context).width;
     final summaryColumns = screenWidth >= 900
         ? 4
@@ -474,35 +678,39 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
     final summaryCards = [
       SummaryCard(
         title: 'Today\'s Sales',
-        value: '₱5,250.00',
+        value: formatAppCurrency(data.todaySales),
         icon: Icons.payments_rounded,
         accent: AppColors.freshGreen,
-        note: 'Sample data',
+        note: 'Completed sales today',
       ),
       SummaryCard(
         title: 'Today\'s Expenses',
-        value: '₱850.00',
+        value: formatAppCurrency(data.todayExpenses),
         icon: Icons.receipt_long_rounded,
         accent: AppColors.warning,
-        note: 'Sample data',
+        note: 'Recorded today',
       ),
       SummaryCard(
         title: 'Estimated Profit',
-        value: '₱1,450.00',
+        value: data.estimatedProfit == null
+            ? 'Unavailable'
+            : formatAppCurrency(data.estimatedProfit!),
         icon: Icons.trending_up_rounded,
         accent: AppColors.forestGreen,
-        note: 'Before overhead',
+        note: data.estimatedProfit == null
+            ? 'Missing product cost data'
+            : 'After product costs and expenses',
       ),
       SummaryCard(
         title: 'Total Products',
-        value: '${widget.products.length}',
+        value: '${data.totalProducts}',
         icon: Icons.inventory_2_rounded,
         accent: AppColors.grey,
         note: 'In inventory',
       ),
       SummaryCard(
         title: 'Low-Stock Products',
-        value: '$lowStockCount',
+        value: '${data.lowStockProductCount}',
         icon: Icons.warning_amber_rounded,
         accent: AppColors.warning,
         note: 'Needs restock',
@@ -556,23 +764,17 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
                 QuickActionButton(
                   icon: Icons.qr_code_scanner_rounded,
                   label: 'Scan Barcode',
-                  onTap: () {
-                    widget.onNavigate(2);
-                    _showMessage(
-                      context,
-                      'Barcode scanning is not implemented yet.',
-                    );
-                  },
+                  onTap: widget.onScanBarcode,
                 ),
                 QuickActionButton(
                   icon: Icons.wallet_rounded,
                   label: 'Add Expense',
-                  onTap: () => widget.onNavigate(4),
+                  onTap: widget.onOpenExpenses,
                 ),
                 QuickActionButton(
                   icon: Icons.people_alt_rounded,
                   label: 'Customer Credit',
-                  onTap: () => widget.onNavigate(4),
+                  onTap: widget.onOpenCredit,
                 ),
                 QuickActionButton(
                   icon: Icons.insert_chart_outlined_rounded,
@@ -582,15 +784,15 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
               ],
             ),
             const SizedBox(height: 22),
-            _buildSalesOverviewCard(context),
+            _buildSalesOverviewCard(context, data),
             const SizedBox(height: 22),
-            _buildInventoryAlertsCard(context, lowStockCount),
+            _buildInventoryAlertsCard(context, data),
             const SizedBox(height: 22),
-            _buildPerformanceCard(),
+            _buildPerformanceCard(data),
             const SizedBox(height: 22),
-            _buildSuggestionsCard(),
+            _buildSuggestionsCard(data),
             const SizedBox(height: 22),
-            _buildRecentTransactionsCard(context),
+            _buildRecentTransactionsCard(context, data),
           ],
         ),
       ),
@@ -737,7 +939,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      'Sample data',
+                      'Live local data',
                       style: TextStyle(
                         fontSize: compact ? 10 : 11,
                         fontWeight: FontWeight.w600,
@@ -765,8 +967,23 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
     );
   }
 
-  Widget _buildSalesOverviewCard(BuildContext context) {
+  Widget _buildSalesOverviewCard(BuildContext context, DashboardData data) {
     final compact = MediaQuery.sizeOf(context).width < 380;
+    final selectedPeriod = switch (_salesPeriod) {
+      'Weekly' => DashboardSalesPeriod.weekly,
+      'Monthly' => DashboardSalesPeriod.monthly,
+      _ => DashboardSalesPeriod.daily,
+    };
+    final buckets = data.salesBuckets(selectedPeriod);
+    final periodTransactions = data.transactionsFor(selectedPeriod);
+    final salesTotal = periodTransactions.fold<double>(
+      0,
+      (total, transaction) => total + transaction.total,
+    );
+    final maximumBucketTotal = buckets.fold<double>(
+      0,
+      (maximum, bucket) => bucket.total > maximum ? bucket.total : maximum,
+    );
     final periodSelector = compact
         ? SizedBox(
             width: 96,
@@ -833,17 +1050,57 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
           ),
           const SizedBox(height: 18),
           SizedBox(
-            height: 150,
+            height: 166,
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _bar(40, AppColors.freshGreen),
-                _bar(90, AppColors.forestGreen),
-                _bar(65, AppColors.freshGreen),
-                _bar(120, AppColors.forestGreen),
-                _bar(83, AppColors.freshGreen),
-                _bar(105, AppColors.forestGreen),
-                _bar(140, AppColors.freshGreen),
+                for (var index = 0; index < buckets.length; index++)
+                  Expanded(
+                    child: Tooltip(
+                      message:
+                          '${buckets[index].label}: '
+                          '${formatAppCurrency(buckets[index].total)}',
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.bottomCenter,
+                                child: Container(
+                                  width: double.infinity,
+                                  height: maximumBucketTotal == 0
+                                      ? 4
+                                      : 8 +
+                                            112 *
+                                                buckets[index].total /
+                                                maximumBucketTotal,
+                                  decoration: BoxDecoration(
+                                    color: index.isEven
+                                        ? AppColors.freshGreen
+                                        : AppColors.forestGreen,
+                                    borderRadius: const BorderRadius.vertical(
+                                      top: Radius.circular(8),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              buckets[index].label,
+                              maxLines: 1,
+                              style: TextStyle(
+                                fontSize: 9,
+                                color: AppColors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -859,7 +1116,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
               ),
               Flexible(
                 child: Text(
-                  '₱5,250.00',
+                  formatAppCurrency(salesTotal),
                   textAlign: TextAlign.end,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -884,7 +1141,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
               ),
               Flexible(
                 child: Text(
-                  '48 sales',
+                  '${periodTransactions.length} transactions',
                   textAlign: TextAlign.end,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -902,7 +1159,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
     );
   }
 
-  Widget _buildInventoryAlertsCard(BuildContext context, int lowStockCount) {
+  Widget _buildInventoryAlertsCard(BuildContext context, DashboardData data) {
     final compact = MediaQuery.sizeOf(context).width < 380;
     return Container(
       padding: EdgeInsets.all(compact ? 14 : 18),
@@ -941,24 +1198,47 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
           const SizedBox(height: 8),
           _alertRow(
             'Low Stock',
-            '$lowStockCount products',
+            '${data.lowStockProductCount} products',
             AppColors.warning,
             Icons.warning_amber_rounded,
           ),
           const Divider(),
           _alertRow(
             'Expiration tracking',
-            'Not configured',
-            AppColors.grey,
-            Icons.event_busy_rounded,
+            data.expirationRecords.isEmpty
+                ? 'No expiration batches recorded'
+                : '${data.nearingExpirationCount} near expiry · '
+                      '${data.expiredCount} expired',
+            data.expiredCount > 0
+                ? AppColors.warning
+                : data.nearingExpirationCount > 0
+                ? AppColors.gold
+                : AppColors.grey,
+            data.expiredCount > 0 || data.nearingExpirationCount > 0
+                ? Icons.event_busy_rounded
+                : Icons.event_available_rounded,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildPerformanceCard() {
+  Widget _buildPerformanceCard(DashboardData data) {
     final compact = MediaQuery.sizeOf(context).width < 380;
+    const alertService = InventoryAlertService();
+    final frequentlySold = alertService
+        .topSellingProducts(
+          data.products,
+          data.sales,
+          period: const Duration(days: 30),
+          now: data.calculatedAt,
+        )
+        .take(3)
+        .toList();
+    final slowMoving = alertService
+        .slowMovingProducts(data.products, data.sales, now: data.calculatedAt)
+        .take(3)
+        .toList();
     return Container(
       padding: EdgeInsets.all(compact ? 14 : 18),
       decoration: BoxDecoration(
@@ -982,16 +1262,22 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
               Expanded(
                 child: _miniPerformanceColumn(
                   title: 'Frequently Sold',
-                  items: const ['Rice', 'Canned Tuna', 'Coffee'],
-                  values: const ['42 units', '31 units', '26 units'],
+                  items: [for (final entry in frequentlySold) entry.key.name],
+                  values: [
+                    for (final entry in frequentlySold)
+                      '${entry.value} units · 30 days',
+                  ],
+                  emptyMessage: 'No sales recorded in the last 30 days.',
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: _miniPerformanceColumn(
                   title: 'Slow-Moving',
-                  items: const ['Soap', 'Biscuits', 'Condiments'],
-                  values: const ['8 units', '6 units', '4 units'],
+                  items: [for (final product in slowMoving) product.name],
+                  values: List.filled(slowMoving.length, 'No sale in 30+ days'),
+                  emptyMessage:
+                      'No products with older sales history qualify yet.',
                 ),
               ),
             ],
@@ -1001,8 +1287,12 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
     );
   }
 
-  Widget _buildSuggestionsCard() {
+  Widget _buildSuggestionsCard(DashboardData data) {
     final compact = MediaQuery.sizeOf(context).width < 380;
+    final pairings = const InventoryAlertService()
+        .frequentProductPairs(data.products, data.sales)
+        .take(3)
+        .toList();
     return Container(
       padding: EdgeInsets.all(compact ? 14 : 18),
       decoration: BoxDecoration(
@@ -1038,44 +1328,56 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
             ],
           ),
           const SizedBox(height: 8),
-          Text(
-            'Explore product-pairing ideas based on your recorded sales history.',
-            style: TextStyle(color: AppColors.charcoal, height: 1.5),
-          ),
+          if (pairings.isEmpty)
+            Text(
+              'More sales history is needed. A product pair must appear '
+              'together in at least two transactions before a suggestion is shown.',
+              style: TextStyle(color: AppColors.charcoal, height: 1.5),
+            )
+          else
+            ...pairings.map(
+              (pair) => Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.shopping_basket_outlined,
+                      size: 18,
+                      color: AppColors.forestGreen,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${pair.first.name} + ${pair.second.name}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: AppColors.charcoal,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '${pair.transactionsTogether}×',
+                      style: const TextStyle(
+                        color: AppColors.forestGreen,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildRecentTransactionsCard(BuildContext context) {
+  Widget _buildRecentTransactionsCard(
+    BuildContext context,
+    DashboardData data,
+  ) {
     final compact = MediaQuery.sizeOf(context).width < 380;
-    final transactions = [
-      const RecentTransactionItem(
-        receiptNumber: 'BZT-1045',
-        date: 'Nov 03, 2026 • 09:20 AM',
-        itemsCount: 6,
-        total: '₱680.00',
-        status: 'Paid',
-        statusColor: AppColors.freshGreen,
-      ),
-      const RecentTransactionItem(
-        receiptNumber: 'BZT-1042',
-        date: 'Nov 03, 2026 • 08:46 AM',
-        itemsCount: 3,
-        total: '₱420.00',
-        status: 'Pending',
-        statusColor: AppColors.warning,
-      ),
-      const RecentTransactionItem(
-        receiptNumber: 'BZT-1038',
-        date: 'Nov 02, 2026 • 06:18 PM',
-        itemsCount: 9,
-        total: '₱1,250.00',
-        status: 'Paid',
-        statusColor: AppColors.freshGreen,
-      ),
-    ];
-
     return Container(
       padding: EdgeInsets.all(compact ? 14 : 18),
       decoration: BoxDecoration(
@@ -1099,7 +1401,7 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
-                    onPressed: () => widget.onNavigate(2),
+                    onPressed: widget.onOpenTransactions,
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       visualDensity: VisualDensity.compact,
@@ -1122,13 +1424,45 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
                   ),
                 ),
                 TextButton(
-                  onPressed: () => widget.onNavigate(2),
+                  onPressed: widget.onOpenTransactions,
                   child: const Text('View All Transactions'),
                 ),
               ],
             ),
           const SizedBox(height: 8),
-          Column(children: transactions),
+          if (data.recentTransactions.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'No recorded transactions yet.',
+                textAlign: TextAlign.center,
+              ),
+            )
+          else
+            Column(
+              children: [
+                for (final transaction in data.recentTransactions)
+                  RecentTransactionItem(
+                    receiptNumber: transaction.receiptNumber,
+                    date:
+                        '${MaterialLocalizations.of(context).formatMediumDate(transaction.date)} · '
+                        '${TimeOfDay.fromDateTime(transaction.date).format(context)}',
+                    itemsCount: transaction.items.fold<int>(
+                      0,
+                      (count, item) => count + item.quantitySold,
+                    ),
+                    total: formatAppCurrency(transaction.total),
+                    status: data.isTransactionPaid(transaction)
+                        ? 'Paid'
+                        : transaction.amountPaid > 0
+                        ? 'Partial'
+                        : 'Pending',
+                    statusColor: data.isTransactionPaid(transaction)
+                        ? AppColors.freshGreen
+                        : AppColors.warning,
+                  ),
+              ],
+            ),
         ],
       ),
     );
@@ -1173,30 +1507,11 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
     );
   }
 
-  Widget _bar(double heightFactor, Color color) {
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 5),
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: Container(
-            height: heightFactor,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(12),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _miniPerformanceColumn({
     required String title,
     required List<String> items,
     required List<String> values,
+    required String emptyMessage,
   }) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -1216,40 +1531,38 @@ class _HomeDashboardPageState extends State<_HomeDashboardPage> {
             ),
           ),
           const SizedBox(height: 12),
-          ...List.generate(items.length, (index) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          items[index],
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.charcoal,
-                          ),
-                        ),
-                        Text(
-                          values[index],
-                          style: TextStyle(fontSize: 11, color: AppColors.grey),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Icon(
-                    Icons.arrow_upward_rounded,
-                    color: AppColors.freshGreen,
-                    size: 16,
-                  ),
-                ],
+          if (items.isEmpty)
+            Text(
+              emptyMessage,
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.grey,
+                height: 1.4,
               ),
-            );
-          }),
+            )
+          else
+            ...List.generate(items.length, (index) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      items[index],
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.charcoal,
+                      ),
+                    ),
+                    Text(
+                      values[index],
+                      style: TextStyle(fontSize: 11, color: AppColors.grey),
+                    ),
+                  ],
+                ),
+              );
+            }),
         ],
       ),
     );

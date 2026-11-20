@@ -14,12 +14,14 @@ class SalesInOneScreen extends StatefulWidget {
   final ProductController productController;
   final SaleRepository saleRepository;
   final ActivityLogService? activityLog;
+  final int scanRequestVersion;
 
   const SalesInOneScreen({
     super.key,
     required this.productController,
     required this.saleRepository,
     this.activityLog = const ActivityLogService(),
+    this.scanRequestVersion = 0,
   });
 
   @override
@@ -61,6 +63,23 @@ class _SalesInOneScreenState extends State<SalesInOneScreen> {
   final _searchController = TextEditingController();
   final _quantities = _SalesCartState.quantities;
   String _searchTerm = '';
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.scanRequestVersion > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scanBarcode());
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant SalesInOneScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.scanRequestVersion != widget.scanRequestVersion &&
+        widget.scanRequestVersion > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scanBarcode());
+    }
+  }
 
   @override
   void dispose() {

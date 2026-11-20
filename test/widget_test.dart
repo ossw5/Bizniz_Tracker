@@ -7,10 +7,13 @@ import 'package:hive/hive.dart';
 import 'package:bizniz_tracker/app.dart';
 import 'package:bizniz_tracker/core/failure.dart';
 import 'package:bizniz_tracker/core/theme/app_theme.dart';
+import 'package:bizniz_tracker/features/customer_credit_and_debit_tracking/services/credit_tracking_service.dart';
 import 'package:bizniz_tracker/features/dashboard/dashboard_screen.dart';
+import 'package:bizniz_tracker/features/expense_tracking/services/expense_service.dart';
 import 'package:bizniz_tracker/features/products/domain/product.dart';
 import 'package:bizniz_tracker/features/products/domain/repositories.dart';
 import 'package:bizniz_tracker/features/products/presentation/controllers.dart';
+import 'package:bizniz_tracker/features/product_and_inventory_management/services/expiration_service.dart';
 import 'package:bizniz_tracker/features/sales/domain/sale.dart';
 import 'package:bizniz_tracker/features/sales/domain/sale_repository.dart';
 import 'package:dartz/dartz.dart';
@@ -23,6 +26,9 @@ void main() {
     directory = await Directory.systemTemp.createTemp('widget_test_');
     Hive.init(directory.path);
     await Hive.openBox<dynamic>('business_activity_log_box');
+    await Hive.openBox<dynamic>(ExpenseService.recordsBoxName);
+    await Hive.openBox<dynamic>(ExpirationService.recordsBoxName);
+    await Hive.openBox<dynamic>(CreditTrackingService.creditsBoxName);
   });
 
   tearDownAll(() async {
@@ -143,7 +149,7 @@ void main() {
 
     expect(find.text('SUGGESTIONS'), findsOneWidget);
     expect(
-      find.text('Pair slow-moving products with popular items'),
+      find.text('Products frequently bought with slow-moving items'),
       findsOneWidget,
     );
   });
@@ -310,7 +316,6 @@ void main() {
     expect(find.textContaining('2 sold'), findsOneWidget);
     expect(find.text('Milk'), findsOneWidget);
     expect(find.textContaining('1 sold'), findsOneWidget);
-
   });
 }
 

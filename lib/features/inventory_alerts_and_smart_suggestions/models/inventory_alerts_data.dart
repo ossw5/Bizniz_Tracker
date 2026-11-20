@@ -17,12 +17,14 @@ class InventoryComboSuggestion {
   final ProductModel? pairedProduct;
   final InventorySuggestionType type;
   final int discountPercent;
+  final int transactionsTogether;
 
   const InventoryComboSuggestion({
     required this.featuredProduct,
     required this.pairedProduct,
     required this.type,
     this.discountPercent = 10,
+    this.transactionsTogether = 0,
   });
 
   double get originalPrice =>
@@ -39,5 +41,18 @@ class InventoryComboSuggestion {
         pairedProduct: pairedProduct,
         type: type,
         discountPercent: discountPercent ?? this.discountPercent,
+        transactionsTogether: transactionsTogether,
       );
+}
+
+class InventoryProductPair {
+  final ProductModel first;
+  final ProductModel second;
+  final int transactionsTogether;
+
+  const InventoryProductPair({
+    required this.first,
+    required this.second,
+    required this.transactionsTogether,
+  });
 }

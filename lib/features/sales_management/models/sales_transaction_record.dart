@@ -14,6 +14,8 @@ class SalesTransactionRecord {
   final double amountPaid;
   final double changeDue;
   final String paymentMethod;
+  final String? customerName;
+  final double? remainingCredit;
 
   const SalesTransactionRecord({
     required this.id,
@@ -26,6 +28,8 @@ class SalesTransactionRecord {
     required this.amountPaid,
     required this.changeDue,
     required this.paymentMethod,
+    this.customerName,
+    this.remainingCredit,
   });
 
   factory SalesTransactionRecord.fromSales(Iterable<Sale> sales) {
@@ -55,6 +59,24 @@ class SalesTransactionRecord {
       paymentMethod: first.paymentMethod ?? 'Recorded sale',
     );
   }
+
+  SalesTransactionRecord copyWith({
+    String? customerName,
+    double? remainingCredit,
+  }) => SalesTransactionRecord(
+    id: id,
+    receiptNumber: receiptNumber,
+    date: date,
+    items: items,
+    subtotal: subtotal,
+    discount: discount,
+    total: total,
+    amountPaid: amountPaid,
+    changeDue: changeDue,
+    paymentMethod: paymentMethod,
+    customerName: customerName ?? this.customerName,
+    remainingCredit: remainingCredit ?? this.remainingCredit,
+  );
 
   static List<SalesTransactionRecord> groupSales(Iterable<Sale> sales) {
     final grouped = <String, List<Sale>>{};

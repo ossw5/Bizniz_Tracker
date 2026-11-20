@@ -1,38 +1,38 @@
-import 'package:hive/hive.dart';
 import 'package:bizniz_tracker/features/products/domain/product.dart';
+
+import '../../../../core/app_database.dart';
 import 'product_local_datasource.dart';
 
 class ProductLocalDataSourceImpl implements ProductLocalDataSource {
-  final Box<ProductModel> productsBox;
+  final AppDatabase database;
 
-  ProductLocalDataSourceImpl({required this.productsBox});
+  ProductLocalDataSourceImpl({required this.database});
 
   @override
   Future<ProductModel> addProduct(ProductModel product) async {
-    // store by id so we can lookup/delete by id
-    await productsBox.put(product.id, product);
+    await database.putProduct(product);
     return product;
   }
 
   @override
   Future<bool> deleteProduct(String id) async {
-    await productsBox.delete(id);
+    await database.deleteProduct(id);
     return true;
   }
 
   @override
   Future<List<ProductModel>> getAllProducts() async {
-    return productsBox.values.cast<ProductModel>().toList();
+    return database.getProducts();
   }
 
   @override
   Future<ProductModel?> getProductById(String id) async {
-    return productsBox.get(id);
+    return database.getProduct(id);
   }
 
   @override
   Future<ProductModel> updateProduct(ProductModel product) async {
-    await productsBox.put(product.id, product);
+    await database.putProduct(product);
     return product;
   }
 }

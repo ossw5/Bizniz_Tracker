@@ -85,13 +85,13 @@ void main() {
     await tester.enterText(find.byType(TextFormField).at(0), '125.50');
     await tester.enterText(find.byType(TextFormField).at(1), 'Shop supplies');
     tester.testTextInput.hide();
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
     await tester.ensureVisible(find.text('Save Expense'));
     await tester.tap(find.text('Save Expense'));
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
 
+    await tester.drag(find.byType(ListView).last, const Offset(0, -900));
+    await tester.pumpAndSettle();
     expect(find.text('Shop supplies'), findsOneWidget);
     expect(find.text('Utilities'), findsOneWidget);
     expect(find.textContaining('₱125.50'), findsWidgets);
@@ -118,6 +118,79 @@ void main() {
       throwsA(isA<ArgumentError>()),
     );
   });
+
+  test(
+    'expense report details persist and older records retain defaults',
+    () async {
+      final created = await service.addExpense(
+        category: 'Stock',
+        description: 'Wholesale goods',
+        amount: 350,
+        expenseDate: DateTime(2026, 11, 12),
+        paymentMethod: 'Bank Transfer',
+        referenceNumber: 'TRX-12',
+        recordedBy: 'Owner',
+        remarks: 'For resale',
+        expenseType: 'Inventory Purchase',
+      );
+      final loaded = (await service.loadAll()).single;
+      expect(loaded.paymentMethod, 'Bank Transfer');
+      expect(loaded.referenceNumber, 'TRX-12');
+      expect(loaded.recordedBy, 'Owner');
+      expect(loaded.remarks, 'For resale');
+      expect(loaded.expenseType, 'Inventory Purchase');
+      expect(
+        ExpenseRecord.fromMap({
+          'id': created.id,
+          'category': 'Utilities',
+          'description': 'Legacy record',
+          'amount': 10,
+          'expenseDate': DateTime(2026, 11, 12),
+          'createdAt': DateTime(2026, 11, 12),
+        }).paymentMethod,
+        'Cash',
+      );
+    },
+  );
+
+  test(
+    'expense records remain available after reopening their Hive box',
+    () async {
+      final saved = await service.addExpense(
+        category: 'Utilities',
+        description: 'Electricity',
+        amount: 1250,
+        expenseDate: DateTime(2026, 11, 8, 15),
+        paymentMethod: 'Bank Transfer',
+        referenceNumber: 'BILL-8',
+        remarks: 'November bill',
+      );
+      await Hive.box<dynamic>(ExpenseService.recordsBoxName).close();
+
+      final loaded = await service.loadAll();
+      expect(loaded, hasLength(1));
+      expect(loaded.single.id, saved.id);
+      expect(loaded.single.expenseDate, DateTime(2026, 11, 8));
+      expect(loaded.single.amount, 1250);
+      expect(loaded.single.paymentMethod, 'Bank Transfer');
+      expect(loaded.single.referenceNumber, 'BILL-8');
+      expect(loaded.single.remarks, 'November bill');
+    },
+  );
+
+  test('expense records accept ISO date strings from older saved formats', () {
+    final record = ExpenseRecord.fromMap({
+      'id': 'legacy-expense',
+      'category': 'Utilities',
+      'description': 'Legacy bill',
+      'amount': 10,
+      'expenseDate': '2026-11-08T00:00:00.000',
+      'createdAt': '2026-11-08T09:30:00.000',
+    });
+
+    expect(record.expenseDate, DateTime(2026, 11, 8));
+    expect(record.createdAt, DateTime(2026, 11, 8, 9, 30));
+  });
 }
 
 class _MemoryExpenseService extends ExpenseService {
@@ -132,6 +205,11 @@ class _MemoryExpenseService extends ExpenseService {
     required String description,
     required double amount,
     required DateTime expenseDate,
+    String paymentMethod = 'Cash',
+    String? referenceNumber,
+    String? recordedBy,
+    String remarks = '',
+    String expenseType = 'Operating Expense',
   }) async {
     final record = ExpenseRecord(
       id: 'memory-${records.length}',
@@ -144,6 +222,11 @@ class _MemoryExpenseService extends ExpenseService {
         expenseDate.day,
       ),
       createdAt: DateTime.now(),
+      paymentMethod: paymentMethod,
+      referenceNumber: referenceNumber,
+      recordedBy: recordedBy,
+      remarks: remarks,
+      expenseType: expenseType,
     );
     records.add(record);
     return record;

@@ -4,6 +4,8 @@ import '../../sales/domain/sale.dart';
 import '../../sales/domain/sale_repository.dart';
 import '../models/sales_transaction_record.dart';
 import '../../settings/services/activity_log_service.dart';
+import '../../customer_credit_and_debit_tracking/models/credit_records.dart';
+import '../../customer_credit_and_debit_tracking/services/credit_tracking_service.dart';
 
 class SalesInOneException implements Exception {
   final String message;
@@ -15,17 +17,19 @@ class SalesInOneException implements Exception {
 }
 
 class SalesInOneService {
-  static const paymentMethods = ['Cash', 'GCash', 'Card'];
+  static const paymentMethods = ['Cash', 'GCash', 'Card', 'Credit'];
 
   final ProductController productController;
   final SaleRepository saleRepository;
   final ActivityLogService? activityLog;
+  final CreditTrackingService creditService;
   final Map<String, Future<SalesTransactionRecord>> _inFlightTransactions = {};
 
   SalesInOneService({
     required this.productController,
     required this.saleRepository,
     this.activityLog = const ActivityLogService(),
+    this.creditService = const CreditTrackingService(),
   });
 
   Future<SalesTransactionRecord> completeSale({
@@ -34,6 +38,8 @@ class SalesInOneService {
     required String paymentMethod,
     String? transactionId,
     DateTime? now,
+    CreditCustomer? creditCustomer,
+    double initialCreditPayment = 0,
   }) async {
     final date = now ?? DateTime.now();
     final requestId = transactionId ?? _newTransactionId(date);
@@ -46,6 +52,8 @@ class SalesInOneService {
       paymentMethod: paymentMethod,
       requestId: requestId,
       date: date,
+      creditCustomer: creditCustomer,
+      initialCreditPayment: initialCreditPayment,
     );
     _inFlightTransactions[requestId] = completion;
     try {
@@ -61,6 +69,8 @@ class SalesInOneService {
     required String paymentMethod,
     required String requestId,
     required DateTime date,
+    required CreditCustomer? creditCustomer,
+    required double initialCreditPayment,
   }) async {
     if (requestId.trim().isEmpty) {
       throw const SalesInOneException('A transaction ID is required.');
@@ -93,6 +103,19 @@ class SalesInOneService {
       if (sameQuantities &&
           _toCents(existing.amountPaid) == _toCents(amountPaid) &&
           existing.paymentMethod == paymentMethod) {
+        if (paymentMethod == 'Credit') {
+          final credits = await creditService.loadCredits();
+          final matchingCredits = credits
+              .where((account) => account.saleId == requestId)
+              .toList();
+          final credit = matchingCredits.isEmpty ? null : matchingCredits.first;
+          if (credit != null) {
+            return existing.copyWith(
+              customerName: credit.customerName,
+              remainingCredit: credit.outstandingBalance,
+            );
+          }
+        }
         return existing;
       }
       throw const SalesInOneException(
@@ -124,12 +147,27 @@ class SalesInOneService {
     }
 
     final paidCents = _toCents(amountPaid);
-    if (paidCents < subtotalCents) {
+    if (paymentMethod == 'Credit') {
+      if (creditCustomer == null) {
+        throw const SalesInOneException(
+          'Select a customer account for credit payment.',
+        );
+      }
+      if (initialCreditPayment.isFinite == false ||
+          _toCents(initialCreditPayment) < 0 ||
+          _toCents(initialCreditPayment) > subtotalCents) {
+        throw const SalesInOneException(
+          'Enter a valid initial credit payment.',
+        );
+      }
+    } else if (paidCents < subtotalCents) {
       throw const SalesInOneException(
         'The amount received must cover the total amount due.',
       );
     }
-    if (paymentMethod != 'Cash' && paidCents != subtotalCents) {
+    if (paymentMethod == 'Credit') {
+      // Initial credit payments are recorded against one transaction-level credit.
+    } else if (paymentMethod != 'Cash' && paidCents != subtotalCents) {
       throw const SalesInOneException(
         'For GCash or card, enter the exact amount due.',
       );
@@ -139,7 +177,9 @@ class SalesInOneService {
     final receiptNumber = _nextReceiptNumber(date, requestId, existingSales);
     final subtotal = subtotalCents / 100;
     final total = subtotal;
-    final amount = paidCents / 100;
+    final amount = paymentMethod == 'Credit'
+        ? _toCents(initialCreditPayment) / 100
+        : paidCents / 100;
     final changeDue = paymentMethod == 'Cash'
         ? (paidCents - subtotalCents) / 100
         : 0.0;
@@ -168,6 +208,7 @@ class SalesInOneService {
 
     final attemptedProducts = <ProductModel>[];
     final savedSales = <Sale>[];
+    CreditAccount? savedCredit;
     try {
       for (final product in selectedProducts) {
         attemptedProducts.add(product);
@@ -186,8 +227,30 @@ class SalesInOneService {
         await saleRepository.addSale(sale);
         savedSales.add(sale);
       }
+      if (paymentMethod == 'Credit') {
+        savedCredit = await creditService.addTransactionCredit(
+          customer: creditCustomer!,
+          saleId: requestId,
+          itemName: selectedProducts.map((product) => product.name).join(', '),
+          quantity: quantities.values.fold<int>(
+            0,
+            (sum, quantity) => sum + quantity,
+          ),
+          originalAmount: total,
+          initialPayment: initialCreditPayment,
+          creditDate: date,
+          dueDate: date.add(const Duration(days: 30)),
+        );
+      }
     } catch (error) {
       final rollbackErrors = <String>[];
+      if (savedCredit != null) {
+        try {
+          await creditService.rollbackCredit(savedCredit.id);
+        } catch (rollbackError) {
+          rollbackErrors.add('credit record: $rollbackError');
+        }
+      }
       for (final sale in savedSales.reversed) {
         try {
           final deleted = await saleRepository.deleteSale(sale.id);
@@ -236,7 +299,14 @@ class SalesInOneService {
       category: 'Sales',
       occurredAt: date,
     );
-    return SalesTransactionRecord.fromSales(sales);
+    final transaction = SalesTransactionRecord.fromSales(sales);
+    if (paymentMethod == 'Credit') {
+      return transaction.copyWith(
+        customerName: creditCustomer!.fullName,
+        remainingCredit: savedCredit!.outstandingBalance,
+      );
+    }
+    return transaction;
   }
 
   String _nextReceiptNumber(

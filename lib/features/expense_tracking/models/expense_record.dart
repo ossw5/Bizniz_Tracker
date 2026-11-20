@@ -5,6 +5,11 @@ class ExpenseRecord {
   final double amount;
   final DateTime expenseDate;
   final DateTime createdAt;
+  final String paymentMethod;
+  final String? referenceNumber;
+  final String? recordedBy;
+  final String remarks;
+  final String expenseType;
 
   const ExpenseRecord({
     required this.id,
@@ -13,6 +18,11 @@ class ExpenseRecord {
     required this.amount,
     required this.expenseDate,
     required this.createdAt,
+    this.paymentMethod = 'Cash',
+    this.referenceNumber,
+    this.recordedBy,
+    this.remarks = '',
+    this.expenseType = 'Operating Expense',
   });
 
   ExpenseRecord copyWith({
@@ -20,6 +30,11 @@ class ExpenseRecord {
     String? description,
     double? amount,
     DateTime? expenseDate,
+    String? paymentMethod,
+    String? referenceNumber,
+    String? recordedBy,
+    String? remarks,
+    String? expenseType,
   }) {
     return ExpenseRecord(
       id: id,
@@ -28,6 +43,11 @@ class ExpenseRecord {
       amount: amount ?? this.amount,
       expenseDate: expenseDate ?? this.expenseDate,
       createdAt: createdAt,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
+      referenceNumber: referenceNumber ?? this.referenceNumber,
+      recordedBy: recordedBy ?? this.recordedBy,
+      remarks: remarks ?? this.remarks,
+      expenseType: expenseType ?? this.expenseType,
     );
   }
 
@@ -38,6 +58,11 @@ class ExpenseRecord {
     'amount': amount,
     'expenseDate': expenseDate,
     'createdAt': createdAt,
+    'paymentMethod': paymentMethod,
+    'referenceNumber': referenceNumber,
+    'recordedBy': recordedBy,
+    'remarks': remarks,
+    'expenseType': expenseType,
   };
 
   factory ExpenseRecord.fromMap(Map<dynamic, dynamic> map) => ExpenseRecord(
@@ -45,9 +70,23 @@ class ExpenseRecord {
     category: map['category'] as String,
     description: map['description'] as String,
     amount: (map['amount'] as num).toDouble(),
-    expenseDate: map['expenseDate'] as DateTime,
-    createdAt: map['createdAt'] as DateTime,
+    expenseDate: _dateFrom(map['expenseDate'], 'expenseDate'),
+    createdAt: _dateFrom(map['createdAt'], 'createdAt'),
+    paymentMethod: map['paymentMethod'] as String? ?? 'Cash',
+    referenceNumber: map['referenceNumber'] as String?,
+    recordedBy: map['recordedBy'] as String?,
+    remarks: map['remarks'] as String? ?? '',
+    expenseType: map['expenseType'] as String? ?? 'Operating Expense',
   );
+
+  static DateTime _dateFrom(Object? value, String field) {
+    if (value is DateTime) return value;
+    if (value is String) {
+      final parsed = DateTime.tryParse(value);
+      if (parsed != null) return parsed;
+    }
+    throw FormatException('Invalid expense $field.');
+  }
 }
 
 class ExpenseCorrection {

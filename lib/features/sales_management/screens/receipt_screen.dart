@@ -56,6 +56,11 @@ class ReceiptScreen extends StatelessWidget {
                   const SizedBox(height: 16),
                   Text('Receipt: ${transaction.receiptNumber}'),
                   Text('Date: $date, $time'),
+                  if (transaction.customerName != null &&
+                      transaction.customerName!.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text('Customer: ${transaction.customerName}'),
+                  ],
                   const Divider(height: 28),
                   for (final item in transaction.items)
                     Padding(
@@ -83,11 +88,27 @@ class ReceiptScreen extends StatelessWidget {
                     value: transaction.discount,
                   ),
                   _ReceiptAmount(label: 'Total', value: transaction.total),
-                  _ReceiptAmount(
-                    label: 'Paid (${transaction.paymentMethod})',
-                    value: transaction.amountPaid,
-                  ),
-                  _ReceiptAmount(label: 'Change', value: transaction.changeDue),
+                  if (transaction.paymentMethod != 'Credit')
+                    _ReceiptAmount(
+                      label: 'Paid (${transaction.paymentMethod})',
+                      value: transaction.amountPaid,
+                    ),
+                  if (transaction.paymentMethod == 'Credit')
+                    const _ReceiptAmount(
+                      label: 'Payment Status',
+                      valueText: 'UNPAID',
+                    ),
+                  if (transaction.paymentMethod != 'Credit')
+                    _ReceiptAmount(
+                      label: 'Change',
+                      value: transaction.changeDue,
+                    ),
+                  if (transaction.paymentMethod == 'Credit') ...[
+                    _ReceiptAmount(
+                      label: 'Remaining Credit',
+                      value: transaction.remainingCredit ?? transaction.total,
+                    ),
+                  ],
                   const SizedBox(height: 20),
                   FilledButton(
                     onPressed: () => Navigator.of(context).pop(),
@@ -124,16 +145,20 @@ class ReceiptScreen extends StatelessWidget {
 
 class _ReceiptAmount extends StatelessWidget {
   final String label;
-  final double value;
+  final double? value;
+  final String? valueText;
 
-  const _ReceiptAmount({required this.label, required this.value});
+  const _ReceiptAmount({required this.label, this.value, this.valueText});
 
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 3),
     child: Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [Text(label), Text(formatSalesCurrency(value))],
+      children: [
+        Text(label),
+        Text(valueText ?? formatSalesCurrency(value ?? 0)),
+      ],
     ),
   );
 }

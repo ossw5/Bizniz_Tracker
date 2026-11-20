@@ -1,33 +1,37 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_saver/file_saver.dart';
+import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
-import '../../../core/csv_export.dart';
 import '../../../core/formatters.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../products/domain/product.dart';
 import '../../sales/domain/sale.dart';
 import '../../sales/domain/sale_repository.dart';
+import '../../reports/services/expense_report_summary.dart';
+import '../../reports/services/report_export_service.dart';
+import '../../reports/services/report_period.dart';
 import '../models/expense_record.dart';
 import '../services/expense_service.dart';
 import 'expense_correction_history_screen.dart';
-
-enum _ExpensePeriod { daily, weekly, monthly }
 
 class ExpenseTrackingScreen extends StatefulWidget {
   final SaleRepository? saleRepository;
   final List<ProductModel> products;
   final ExpenseService service;
+  final String businessName;
+  final String preparedBy;
 
   const ExpenseTrackingScreen({
     super.key,
     required this.saleRepository,
     required this.products,
     this.service = const ExpenseService(),
+    this.businessName = 'Bizniz Tracker',
+    this.preparedBy = '',
   });
 
   @override
@@ -35,8 +39,9 @@ class ExpenseTrackingScreen extends StatefulWidget {
 }
 
 class _ExpenseTrackingScreenState extends State<ExpenseTrackingScreen> {
-  _ExpensePeriod _period = _ExpensePeriod.monthly;
+  ReportPeriod _period = ReportPeriod.monthly;
   DateTime _selectedDate = DateTime.now();
+  DateTimeRange? _customRange;
   List<ExpenseRecord> _expenses = const [];
   List<Sale> _sales = const [];
   bool _loading = true;
@@ -48,32 +53,11 @@ class _ExpenseTrackingScreenState extends State<ExpenseTrackingScreen> {
     _load();
   }
 
-  DateTimeRange get _periodRange {
-    final selected = DateTime(
-      _selectedDate.year,
-      _selectedDate.month,
-      _selectedDate.day,
-    );
-    switch (_period) {
-      case _ExpensePeriod.daily:
-        return DateTimeRange(
-          start: selected,
-          end: selected.add(const Duration(days: 1)),
-        );
-      case _ExpensePeriod.weekly:
-        final start = selected.subtract(Duration(days: selected.weekday - 1));
-        return DateTimeRange(
-          start: start,
-          end: start.add(const Duration(days: 7)),
-        );
-      case _ExpensePeriod.monthly:
-        final start = DateTime(selected.year, selected.month);
-        return DateTimeRange(
-          start: start,
-          end: DateTime(start.year, start.month + 1),
-        );
-    }
-  }
+  DateTimeRange get _periodRange => ReportPeriodRange.resolve(
+    period: _period,
+    selectedDate: _selectedDate,
+    customRange: _customRange,
+  );
 
   Future<void> _load() async {
     setState(() {
@@ -102,27 +86,58 @@ class _ExpenseTrackingScreenState extends State<ExpenseTrackingScreen> {
 
   List<ExpenseRecord> get _periodExpenses => _expenses
       .where((expense) {
-        return !expense.expenseDate.isBefore(_periodRange.start) &&
-            expense.expenseDate.isBefore(_periodRange.end);
+        return ReportPeriodRange.contains(_periodRange, expense.expenseDate);
       })
       .toList(growable: false);
 
   List<Sale> get _periodSales => _sales
       .where((sale) {
-        return !sale.saleDate.isBefore(_periodRange.start) &&
-            sale.saleDate.isBefore(_periodRange.end);
+        return ReportPeriodRange.contains(_periodRange, sale.saleDate);
       })
       .toList(growable: false);
 
   Future<void> _selectDate() async {
     final today = DateTime.now();
+    if (_period == ReportPeriod.custom) {
+      final selectedDay = DateTime(
+        _selectedDate.year,
+        _selectedDate.month,
+        _selectedDate.day,
+      );
+      final range = await showDateRangePicker(
+        context: context,
+        firstDate: DateTime(2000),
+        lastDate: DateTime(today.year + 5),
+        initialDateRange:
+            _customRange ?? DateTimeRange(start: selectedDay, end: selectedDay),
+      );
+      if (range != null) {
+        setState(() {
+          _customRange = DateTimeRange(
+            start: DateTime(
+              range.start.year,
+              range.start.month,
+              range.start.day,
+            ),
+            end: DateTime(range.end.year, range.end.month, range.end.day),
+          );
+        });
+      }
+      return;
+    }
     final picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
       firstDate: DateTime(2000),
       lastDate: DateTime(today.year + 5),
     );
-    if (picked != null) setState(() => _selectedDate = picked);
+    if (picked != null) {
+      setState(() {
+        _selectedDate = _period == ReportPeriod.yearly
+            ? DateTime(picked.year)
+            : picked;
+      });
+    }
   }
 
   Future<void> _openExpenseForm({ExpenseRecord? expense}) async {
@@ -132,26 +147,50 @@ class _ExpenseTrackingScreenState extends State<ExpenseTrackingScreen> {
       useSafeArea: true,
       builder: (context) => _ExpenseFormSheet(
         initial: expense,
-        onSave: (category, description, amount, date, reason) async {
-          if (expense == null) {
-            await widget.service.addExpense(
-              category: category,
-              description: description,
-              amount: amount,
-              expenseDate: date,
-            );
-          } else {
-            await widget.service.updateExpense(
-              updated: expense.copyWith(
-                category: category,
-                description: description,
-                amount: amount,
-                expenseDate: date,
-              ),
-              reason: reason!,
-            );
-          }
-        },
+        categories: ExpenseService.defaultCategories.toList(growable: false),
+        onSave:
+            (
+              category,
+              description,
+              amount,
+              date,
+              paymentMethod,
+              referenceNumber,
+              remarks,
+              expenseType,
+              reason,
+            ) async {
+              if (expense == null) {
+                await widget.service.addExpense(
+                  category: category,
+                  description: description,
+                  amount: amount,
+                  expenseDate: date,
+                  paymentMethod: paymentMethod,
+                  referenceNumber: referenceNumber,
+                  recordedBy: widget.preparedBy,
+                  remarks: remarks,
+                  expenseType: expenseType,
+                );
+              } else {
+                await widget.service.updateExpense(
+                  updated: expense.copyWith(
+                    category: category,
+                    description: description,
+                    amount: amount,
+                    expenseDate: date,
+                    paymentMethod: paymentMethod,
+                    referenceNumber: referenceNumber,
+                    recordedBy: widget.preparedBy.isEmpty
+                        ? expense.recordedBy
+                        : widget.preparedBy,
+                    remarks: remarks,
+                    expenseType: expenseType,
+                  ),
+                  reason: reason!,
+                );
+              }
+            },
       ),
     );
     if (saved == true && mounted) await _load();
@@ -220,101 +259,330 @@ class _ExpenseTrackingScreenState extends State<ExpenseTrackingScreen> {
     }
   }
 
-  Future<void> _exportCsv() async {
-    final csv = _expensesToCsv(_expenses);
-    final fileName =
-        'expenses_${DateTime.now().toIso8601String().replaceAll(':', '-')}.csv';
-    if (kIsWeb) {
-      try {
-        await FileSaver.instance.saveFile(
-          name: fileName,
-          bytes: Uint8List.fromList(utf8.encode(csv)),
-          fileExtension: 'csv',
-          mimeType: MimeType.csv,
-        );
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Expense CSV downloaded.')),
-        );
-      } catch (error) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not export expenses: $error')),
+  String get _periodLabel => reportPeriodLabel(_period);
+
+  String get _businessName => widget.businessName.trim().isEmpty
+      ? 'Bizniz Tracker'
+      : widget.businessName.trim();
+
+  List<List<Object?>> _expenseReportRows() {
+    final report = ExpenseReportSummary.fromRecords(_periodExpenses);
+    final range = _periodRange;
+    final rows = <List<Object?>>[
+      ['Business Name', _businessName],
+      ['Report Type', 'Expense Report'],
+      ['Report Period', _periodLabel],
+      ['Start Date', _dateText(range.start)],
+      ['End Date', _dateText(range.end.subtract(const Duration(days: 1)))],
+      ['Generated Date', _dateText(DateTime.now())],
+      ['Prepared By', widget.preparedBy],
+      [],
+      ['Expense Summary'],
+      ['Total Expenses', report.total.toStringAsFixed(2)],
+      ['Expense Transactions', report.transactionCount],
+      ['Highest Expense', report.highest?.amount.toStringAsFixed(2) ?? '0.00'],
+      ['Average Expense', report.average.toStringAsFixed(2)],
+      [],
+      ['Expense Breakdown by Category'],
+      ['Category', 'Total Amount', 'Percent of Total'],
+    ];
+    for (final entry in report.categoryTotals.entries) {
+      rows.add([
+        entry.key,
+        entry.value.toStringAsFixed(2),
+        '${report.percentageOfTotal(entry.value).toStringAsFixed(2)}%',
+      ]);
+    }
+    rows.addAll([
+      [],
+      ['Expense Breakdown by Payment Method'],
+      ['Payment Method', 'Total Amount', 'Percent of Total'],
+    ]);
+    for (final entry in report.paymentMethodTotals.entries) {
+      rows.add([
+        entry.key,
+        entry.value.toStringAsFixed(2),
+        '${report.percentageOfTotal(entry.value).toStringAsFixed(2)}%',
+      ]);
+    }
+    rows.addAll([
+      [],
+      ['Detailed Expense Records'],
+      [
+        'Expense ID',
+        'Expense Date',
+        'Expense Category',
+        'Description',
+        'Amount',
+        'Payment Method',
+        'Reference Number',
+        'Recorded By',
+        'Remarks',
+        'Expense Type',
+      ],
+    ]);
+    for (final expense in report.records) {
+      rows.add([
+        expense.id,
+        _dateText(expense.expenseDate),
+        expense.category,
+        expense.description,
+        expense.amount.toStringAsFixed(2),
+        expense.paymentMethod,
+        expense.referenceNumber ?? '',
+        expense.recordedBy ?? '',
+        expense.remarks,
+        expense.expenseType,
+      ]);
+    }
+    return rows;
+  }
+
+  String _dateText(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+  Future<void> _export(String format) async {
+    final range = _periodRange;
+    final stamp = DateTime.now().millisecondsSinceEpoch;
+    final baseName = 'expense_report_${_dateText(range.start)}_$stamp';
+    try {
+      if (format == 'pdf') {
+        await _exportPdf(baseName);
+      } else {
+        final rows = _expenseReportRows();
+        final bytes = format == 'csv'
+            ? utf8.encode(ReportExportService.toCsv(rows))
+            : ReportExportService.toXlsx(rows);
+        await const ReportExportService().save(
+          fileName: baseName,
+          extension: format,
+          bytes: bytes,
+          mimeType: format == 'csv' ? MimeType.csv : MimeType.microsoftExcel,
         );
       }
-      return;
-    }
-    try {
-      final path = await CsvExport.saveCsvFile(fileName, csv);
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Expense CSV saved to $path')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Expense $format report exported.')),
+      );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not export expenses: $error')),
+        SnackBar(content: Text('Could not export expense report: $error')),
       );
     }
   }
 
-  Future<void> _exportPdf() async {
+  Future<void> _exportPdf(String fileName) async {
+    final report = ExpenseReportSummary.fromRecords(_periodExpenses);
+    final range = _periodRange;
     final document = pw.Document();
     document.addPage(
       pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
         build: (_) => [
           pw.Text(
-            'Expense Records',
+            'Expense Report',
             style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
           ),
-          pw.SizedBox(height: 12),
-          pw.TableHelper.fromTextArray(
-            headers: const ['Date', 'Category', 'Description', 'Amount (PHP)'],
-            data: [
-              for (final expense in _expenses)
-                [
-                  '${expense.expenseDate.year}-${expense.expenseDate.month.toString().padLeft(2, '0')}-${expense.expenseDate.day.toString().padLeft(2, '0')}',
-                  expense.category,
-                  expense.description,
-                  expense.amount.toStringAsFixed(2),
-                ],
-            ],
+          pw.SizedBox(height: 4),
+          pw.Text(_businessName, style: const pw.TextStyle(fontSize: 12)),
+          pw.SizedBox(height: 8),
+          pw.Text(
+            '$_periodLabel: ${_dateText(range.start)} - '
+            '${_dateText(DateTime(range.end.year, range.end.month, range.end.day - 1))}',
+            style: const pw.TextStyle(fontSize: 9),
           ),
+          pw.SizedBox(height: 16),
+          pw.Text(
+            'Expense Summary',
+            style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+          ),
+          pw.SizedBox(height: 6),
+          pw.TableHelper.fromTextArray(
+            headers: const ['Metric', 'Value'],
+            data: [
+              ['Total Expenses', report.total.toStringAsFixed(2)],
+              ['Expense Transactions', report.transactionCount.toString()],
+              [
+                'Highest Expense',
+                report.highest?.amount.toStringAsFixed(2) ?? '0.00',
+              ],
+              ['Average Expense', report.average.toStringAsFixed(2)],
+            ],
+            headerCount: 1,
+            columnWidths: const {
+              0: pw.FlexColumnWidth(2),
+              1: pw.FlexColumnWidth(1),
+            },
+            cellStyle: const pw.TextStyle(fontSize: 9),
+            headerStyle: pw.TextStyle(
+              fontSize: 9,
+              fontWeight: pw.FontWeight.bold,
+            ),
+            cellPadding: const pw.EdgeInsets.symmetric(
+              horizontal: 8,
+              vertical: 5,
+            ),
+          ),
+          if (report.categoryTotals.isNotEmpty) ...[
+            pw.SizedBox(height: 14),
+            pw.Text(
+              'Expense Breakdown by Category',
+              style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 6),
+            pw.TableHelper.fromTextArray(
+              headers: const ['Category', 'Total Amount', 'Percent of Total'],
+              data: [
+                for (final entry in report.categoryTotals.entries)
+                  [
+                    entry.key,
+                    entry.value.toStringAsFixed(2),
+                    '${report.percentageOfTotal(entry.value).toStringAsFixed(2)}%',
+                  ],
+              ],
+              headerCount: 1,
+              columnWidths: const {
+                0: pw.FlexColumnWidth(2),
+                1: pw.FlexColumnWidth(1),
+                2: pw.FlexColumnWidth(1),
+              },
+              cellStyle: const pw.TextStyle(fontSize: 9),
+              headerStyle: pw.TextStyle(
+                fontSize: 9,
+                fontWeight: pw.FontWeight.bold,
+              ),
+              cellPadding: const pw.EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 5,
+              ),
+            ),
+          ],
+          if (report.paymentMethodTotals.isNotEmpty) ...[
+            pw.SizedBox(height: 14),
+            pw.Text(
+              'Expense Breakdown by Payment Method',
+              style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 6),
+            pw.TableHelper.fromTextArray(
+              headers: const [
+                'Payment Method',
+                'Total Amount',
+                'Percent of Total',
+              ],
+              data: [
+                for (final entry in report.paymentMethodTotals.entries)
+                  [
+                    entry.key,
+                    entry.value.toStringAsFixed(2),
+                    '${report.percentageOfTotal(entry.value).toStringAsFixed(2)}%',
+                  ],
+              ],
+              headerCount: 1,
+              columnWidths: const {
+                0: pw.FlexColumnWidth(2),
+                1: pw.FlexColumnWidth(1),
+                2: pw.FlexColumnWidth(1),
+              },
+              cellStyle: const pw.TextStyle(fontSize: 9),
+              headerStyle: pw.TextStyle(
+                fontSize: 9,
+                fontWeight: pw.FontWeight.bold,
+              ),
+              cellPadding: const pw.EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 5,
+              ),
+            ),
+          ],
+          if (report.records.isEmpty) ...[
+            pw.SizedBox(height: 16),
+            pw.Text(
+              'No expense records were found for this period.',
+              style: const pw.TextStyle(fontSize: 10),
+            ),
+          ],
         ],
       ),
     );
-    try {
-      await Printing.layoutPdf(
-        name: 'expense_records_${DateTime.now().millisecondsSinceEpoch}.pdf',
-        onLayout: (_) => document.save(),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not export expense PDF: $error')),
+    if (report.records.isNotEmpty) {
+      document.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4.landscape,
+          margin: const pw.EdgeInsets.fromLTRB(24, 42, 24, 30),
+          header: (_) => pw.Text(
+            'Expense Report - Detailed Expense Records',
+            style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
+          ),
+          build: (_) => [
+            pw.TableHelper.fromTextArray(
+              headers: const [
+                'Expense ID',
+                'Expense Date',
+                'Category',
+                'Description',
+                'Amount',
+                'Payment Method',
+                'Reference Number',
+                'Recorded By',
+                'Remarks',
+                'Expense Type',
+              ],
+              data: [
+                for (final expense in report.records)
+                  [
+                    expense.id,
+                    _dateText(expense.expenseDate),
+                    expense.category,
+                    expense.description,
+                    expense.amount.toStringAsFixed(2),
+                    expense.paymentMethod,
+                    expense.referenceNumber ?? '',
+                    expense.recordedBy ?? '',
+                    expense.remarks,
+                    expense.expenseType,
+                  ],
+              ],
+              headerCount: 1,
+              columnWidths: const {
+                0: pw.FlexColumnWidth(1),
+                1: pw.FlexColumnWidth(0.75),
+                2: pw.FlexColumnWidth(0.9),
+                3: pw.FlexColumnWidth(1.4),
+                4: pw.FlexColumnWidth(0.65),
+                5: pw.FlexColumnWidth(0.9),
+                6: pw.FlexColumnWidth(0.85),
+                7: pw.FlexColumnWidth(0.8),
+                8: pw.FlexColumnWidth(1.3),
+                9: pw.FlexColumnWidth(1),
+              },
+              defaultColumnWidth: const pw.FlexColumnWidth(1),
+              tableWidth: pw.TableWidth.max,
+              cellStyle: const pw.TextStyle(fontSize: 7),
+              headerStyle: pw.TextStyle(
+                fontSize: 7,
+                fontWeight: pw.FontWeight.bold,
+              ),
+              cellPadding: const pw.EdgeInsets.symmetric(
+                horizontal: 3,
+                vertical: 4,
+              ),
+              headerPadding: const pw.EdgeInsets.symmetric(
+                horizontal: 3,
+                vertical: 5,
+              ),
+              headerDecoration: pw.BoxDecoration(color: PdfColors.grey300),
+            ),
+          ],
+        ),
       );
     }
-  }
-
-  String _expensesToCsv(List<ExpenseRecord> expenses) {
-    String escape(String value) {
-      if (!value.contains(',') &&
-          !value.contains('\n') &&
-          !value.contains('"')) {
-        return value;
-      }
-      return '"${value.replaceAll('"', '""')}"';
-    }
-
-    final output = StringBuffer('id,category,description,amount,date\n');
-    for (final expense in expenses) {
-      output.writeln(
-        '${escape(expense.id)},${escape(expense.category)},'
-        '${escape(expense.description)},${expense.amount.toStringAsFixed(2)},'
-        '${expense.expenseDate.toIso8601String()}',
-      );
-    }
-    return output.toString();
+    await Printing.layoutPdf(
+      name: '$fileName.pdf',
+      onLayout: (_) => document.save(),
+    );
   }
 
   @override
@@ -351,7 +619,15 @@ class _ExpenseTrackingScreenState extends State<ExpenseTrackingScreen> {
         costOfGoods += unitCost * sale.quantitySold;
       }
     }
-    final estimatedProfit = revenue - costOfGoods - totalExpenses;
+    final operatingExpenseRecords = periodExpenses
+        .where((expense) => expense.expenseType != 'Inventory Purchase')
+        .toList();
+    final operatingExpenses = operatingExpenseRecords.fold<double>(
+      0,
+      (sum, expense) => sum + expense.amount,
+    );
+    final inventoryPurchases = totalExpenses - operatingExpenses;
+    final estimatedProfit = revenue - costOfGoods - operatingExpenses;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -369,15 +645,13 @@ class _ExpenseTrackingScreenState extends State<ExpenseTrackingScreen> {
             icon: const Icon(Icons.history_rounded),
           ),
           PopupMenuButton<String>(
-            tooltip: 'Export expenses as CSV',
+            tooltip: 'Export expense report',
             enabled: !_loading,
-            onSelected: (format) {
-              if (format == 'csv') _exportCsv();
-              if (format == 'pdf') _exportPdf();
-            },
+            onSelected: _export,
             itemBuilder: (context) => const [
               PopupMenuItem(value: 'csv', child: Text('Export as CSV')),
               PopupMenuItem(value: 'pdf', child: Text('Export as PDF')),
+              PopupMenuItem(value: 'xlsx', child: Text('Export as Excel')),
             ],
             icon: const Icon(Icons.download_rounded),
           ),
@@ -402,13 +676,16 @@ class _ExpenseTrackingScreenState extends State<ExpenseTrackingScreen> {
                   _FinancialSummary(
                     sales: revenue,
                     costOfGoods: costOfGoods,
-                    expenses: totalExpenses,
+                    expenses: operatingExpenses,
+                    inventoryPurchases: inventoryPurchases,
                     estimatedProfit: estimatedProfit,
                     hasMissingCost: hasMissingCost,
-                    expenseCount: periodExpenses.length,
+                    expenseCount: operatingExpenseRecords.length,
                   ),
                   const SizedBox(height: 16),
                   _CategorySummary(totals: categoryTotals),
+                  const SizedBox(height: 16),
+                  _PaymentMethodSummary(expenses: periodExpenses),
                   const SizedBox(height: 16),
                   Row(
                     children: [
@@ -451,13 +728,15 @@ class _ExpenseTrackingScreenState extends State<ExpenseTrackingScreen> {
   }
 
   Widget _buildPeriodSelector() {
-    const items = <(_ExpensePeriod, String)>[
-      (_ExpensePeriod.daily, 'Daily'),
-      (_ExpensePeriod.weekly, 'Weekly'),
-      (_ExpensePeriod.monthly, 'Monthly'),
+    const items = <(ReportPeriod, String)>[
+      (ReportPeriod.daily, 'Daily'),
+      (ReportPeriod.weekly, 'Weekly'),
+      (ReportPeriod.monthly, 'Monthly'),
+      (ReportPeriod.yearly, 'Yearly'),
+      (ReportPeriod.custom, 'Custom'),
     ];
     final range = _periodRange;
-    final label = _period == _ExpensePeriod.daily
+    final label = _period == ReportPeriod.daily
         ? MaterialLocalizations.of(context).formatMediumDate(_selectedDate)
         : '${MaterialLocalizations.of(context).formatMediumDate(range.start)} – '
               '${MaterialLocalizations.of(context).formatMediumDate(range.end.subtract(const Duration(days: 1)))}';
@@ -466,14 +745,23 @@ class _ExpenseTrackingScreenState extends State<ExpenseTrackingScreen> {
         padding: const EdgeInsets.all(12),
         child: Column(
           children: [
-            SegmentedButton<_ExpensePeriod>(
-              segments: [
+            DropdownButtonFormField<ReportPeriod>(
+              initialValue: _period,
+              decoration: const InputDecoration(labelText: 'Report period'),
+              items: [
                 for (final (period, label) in items)
-                  ButtonSegment(value: period, label: Text(label)),
+                  DropdownMenuItem(value: period, child: Text(label)),
               ],
-              selected: {_period},
-              onSelectionChanged: (selected) =>
-                  setState(() => _period = selected.first),
+              onChanged: (period) {
+                if (period != null) {
+                  setState(() {
+                    _period = period;
+                    if (period == ReportPeriod.yearly) {
+                      _selectedDate = DateTime(_selectedDate.year);
+                    }
+                  });
+                }
+              },
             ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
@@ -492,6 +780,7 @@ class _FinancialSummary extends StatelessWidget {
   final double sales;
   final double costOfGoods;
   final double expenses;
+  final double inventoryPurchases;
   final double estimatedProfit;
   final bool hasMissingCost;
   final int expenseCount;
@@ -500,6 +789,7 @@ class _FinancialSummary extends StatelessWidget {
     required this.sales,
     required this.costOfGoods,
     required this.expenses,
+    required this.inventoryPurchases,
     required this.estimatedProfit,
     required this.hasMissingCost,
     required this.expenseCount,
@@ -526,6 +816,10 @@ class _FinancialSummary extends StatelessWidget {
             _SummaryLine(
               label: 'Operating expenses ($expenseCount)',
               amount: expenses,
+            ),
+            _SummaryLine(
+              label: 'Inventory purchases (excluded from profit)',
+              amount: inventoryPurchases,
             ),
             const Divider(height: 22),
             Row(
@@ -555,7 +849,8 @@ class _FinancialSummary extends StatelessWidget {
               ),
             ],
             Text(
-              'Profit = sales − inventory cost − expenses',
+              'Profit = sales − cost of goods sold − operating expenses. '
+              'Inventory purchases are excluded to avoid counting the same stock cost twice.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
@@ -620,6 +915,44 @@ class _CategorySummary extends StatelessWidget {
   }
 }
 
+class _PaymentMethodSummary extends StatelessWidget {
+  final List<ExpenseRecord> expenses;
+
+  const _PaymentMethodSummary({required this.expenses});
+
+  @override
+  Widget build(BuildContext context) {
+    final totals = <String, double>{};
+    for (final expense in expenses) {
+      totals.update(
+        expense.paymentMethod,
+        (total) => total + expense.amount,
+        ifAbsent: () => expense.amount,
+      );
+    }
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Expenses by payment method',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            if (totals.isEmpty)
+              const Text('Payment totals appear when expenses are recorded.')
+            else
+              for (final entry in totals.entries)
+                _SummaryLine(label: entry.key, amount: entry.value),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ExpenseListTile extends StatelessWidget {
   final ExpenseRecord expense;
   final VoidCallback onEdit;
@@ -671,36 +1004,41 @@ class _ExpenseListTile extends StatelessWidget {
 
 class _ExpenseFormSheet extends StatefulWidget {
   final ExpenseRecord? initial;
+  final List<String> categories;
   final Future<void> Function(
     String category,
     String description,
     double amount,
     DateTime date,
+    String paymentMethod,
+    String? referenceNumber,
+    String remarks,
+    String expenseType,
     String? reason,
   )
   onSave;
 
-  const _ExpenseFormSheet({required this.initial, required this.onSave});
+  const _ExpenseFormSheet({
+    required this.initial,
+    required this.categories,
+    required this.onSave,
+  });
 
   @override
   State<_ExpenseFormSheet> createState() => _ExpenseFormSheetState();
 }
 
 class _ExpenseFormSheetState extends State<_ExpenseFormSheet> {
-  static const _categories = [
-    'Utilities',
-    'Rent',
-    'Supplies',
-    'Transportation',
-    'Salaries',
-    'Maintenance',
-    'Other',
-  ];
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _descriptionController;
   late final TextEditingController _amountController;
   late final TextEditingController _reasonController;
+  late final TextEditingController _referenceController;
+  late final TextEditingController _remarksController;
+  late final List<String> _categories;
   late String _category;
+  late String _paymentMethod;
+  late String _expenseType;
   late DateTime _date;
   bool _saving = false;
 
@@ -710,13 +1048,27 @@ class _ExpenseFormSheetState extends State<_ExpenseFormSheet> {
   void initState() {
     super.initState();
     final initial = widget.initial;
-    _category = initial?.category ?? _categories.first;
+    _categories = widget.categories.isEmpty
+        ? ExpenseService.defaultCategories.toList(growable: false)
+        : widget.categories.toList(growable: false);
+    _category =
+        initial?.category ??
+        _categories.firstWhere(
+          (category) => category == 'Other' || category == 'Utilities',
+          orElse: () => _categories.first,
+        );
     _date = initial?.expenseDate ?? DateTime.now();
     _descriptionController = TextEditingController(text: initial?.description);
     _amountController = TextEditingController(
       text: initial?.amount.toStringAsFixed(2),
     );
     _reasonController = TextEditingController();
+    _referenceController = TextEditingController(
+      text: initial?.referenceNumber,
+    );
+    _remarksController = TextEditingController(text: initial?.remarks);
+    _paymentMethod = initial?.paymentMethod ?? 'Cash';
+    _expenseType = initial?.expenseType ?? 'Operating Expense';
   }
 
   @override
@@ -724,6 +1076,8 @@ class _ExpenseFormSheetState extends State<_ExpenseFormSheet> {
     _descriptionController.dispose();
     _amountController.dispose();
     _reasonController.dispose();
+    _referenceController.dispose();
+    _remarksController.dispose();
     super.dispose();
   }
 
@@ -740,13 +1094,23 @@ class _ExpenseFormSheetState extends State<_ExpenseFormSheet> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     final amount = double.parse(_amountController.text.trim());
+    final description = _descriptionController.text.trim();
+    final category = _category == 'Other' && description.isNotEmpty
+        ? description
+        : _category;
     setState(() => _saving = true);
     try {
       await widget.onSave(
-        _category,
-        _descriptionController.text.trim(),
+        category,
+        description,
         amount,
         _date,
+        _paymentMethod,
+        _referenceController.text.trim().isEmpty
+            ? null
+            : _referenceController.text.trim(),
+        _remarksController.text.trim(),
+        _expenseType,
         _isEditing ? _reasonController.text.trim() : null,
       );
       if (mounted) Navigator.of(context).pop(true);
@@ -803,13 +1167,20 @@ class _ExpenseFormSheetState extends State<_ExpenseFormSheet> {
               TextFormField(
                 controller: _descriptionController,
                 maxLength: 120,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: _category == 'Other'
+                      ? 'Description (required for Other)'
+                      : 'Description',
+                  border: const OutlineInputBorder(),
                 ),
-                validator: (value) => value == null || value.trim().isEmpty
-                    ? 'Description is required.'
-                    : null,
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return _category == 'Other'
+                        ? 'Please specify the expense description.'
+                        : 'Description is required.';
+                  }
+                  return null;
+                },
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
@@ -829,6 +1200,66 @@ class _ExpenseFormSheetState extends State<_ExpenseFormSheet> {
                 onChanged: (value) {
                   if (value != null) setState(() => _category = value);
                 },
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: _paymentMethod,
+                decoration: const InputDecoration(
+                  labelText: 'Payment method',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'Cash', child: Text('Cash')),
+                  DropdownMenuItem(value: 'GCash', child: Text('GCash')),
+                  DropdownMenuItem(
+                    value: 'Bank Transfer',
+                    child: Text('Bank Transfer'),
+                  ),
+                  DropdownMenuItem(value: 'Card', child: Text('Card')),
+                  DropdownMenuItem(value: 'Other', child: Text('Other')),
+                ],
+                onChanged: (value) {
+                  if (value != null) setState(() => _paymentMethod = value);
+                },
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: _expenseType,
+                decoration: const InputDecoration(
+                  labelText: 'Expense type',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'Operating Expense',
+                    child: Text('Operating Expense'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'Inventory Purchase',
+                    child: Text('Inventory Purchase'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value != null) setState(() => _expenseType = value);
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _referenceController,
+                maxLength: 80,
+                decoration: const InputDecoration(
+                  labelText: 'Reference number (optional)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _remarksController,
+                maxLength: 240,
+                decoration: const InputDecoration(
+                  labelText: 'Remarks',
+                  border: OutlineInputBorder(),
+                ),
               ),
               const SizedBox(height: 12),
               OutlinedButton.icon(

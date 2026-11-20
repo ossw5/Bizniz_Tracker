@@ -49,6 +49,34 @@ class AppSettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> resetPreferences() async {
+    await service.resetPreferences();
+    profile = const StoreProfile();
+    preferences = const AppPreferences();
+    lastLocalBackup = null;
+    automaticDriveBackup = false;
+    configureAppFormatting(
+      currencyCode: preferences.currencyCode,
+      datePattern: preferences.datePattern,
+    );
+    AppColors.darkMode = preferences.themeMode == ThemeMode.dark;
+    notifyListeners();
+  }
+
+  Future<void> resetEntireApplication() async {
+    await service.resetEntireApplication();
+    profile = const StoreProfile();
+    preferences = const AppPreferences();
+    lastLocalBackup = null;
+    automaticDriveBackup = false;
+    configureAppFormatting(
+      currencyCode: preferences.currencyCode,
+      datePattern: preferences.datePattern,
+    );
+    AppColors.darkMode = preferences.themeMode == ThemeMode.dark;
+    notifyListeners();
+  }
+
   Future<void> saveAutomaticDriveBackup(bool enabled) async {
     await service.saveAutomaticDriveBackup(enabled);
     automaticDriveBackup = enabled;

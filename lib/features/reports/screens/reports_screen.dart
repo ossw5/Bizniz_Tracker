@@ -14,12 +14,16 @@ class ReportsScreen extends StatefulWidget {
   final SaleRepository? saleRepository;
   final List<ProductModel> products;
   final ProductController? productController;
+  final String businessName;
+  final String preparedBy;
 
   const ReportsScreen({
     super.key,
     required this.saleRepository,
     this.products = const <ProductModel>[],
     this.productController,
+    this.businessName = 'Bizniz Tracker',
+    this.preparedBy = '',
   });
 
   @override
@@ -98,6 +102,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                   MaterialPageRoute(
                                     builder: (_) => SalesSummaryScreen(
                                       saleRepository: widget.saleRepository!,
+                                      businessName: widget.businessName,
+                                      preparedBy: widget.preparedBy,
                                     ),
                                   ),
                                 ),
@@ -115,6 +121,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                 builder: (_) => ExpenseTrackingScreen(
                                   saleRepository: widget.saleRepository,
                                   products: widget.products,
+                                  businessName: widget.businessName,
+                                  preparedBy: widget.preparedBy,
                                 ),
                               ),
                             ),
@@ -243,6 +251,15 @@ class _SalesPeriodSummary extends StatelessWidget {
       0,
       (sum, transaction) => sum + transaction.total,
     );
+    final itemsSold = transactions.fold<int>(
+      0,
+      (sum, transaction) =>
+          sum +
+          transaction.items.fold<int>(
+            0,
+            (itemSum, item) => itemSum + item.quantitySold,
+          ),
+    );
     return Row(
       children: [
         Expanded(
@@ -252,7 +269,7 @@ class _SalesPeriodSummary extends StatelessWidget {
               Text(label, style: Theme.of(context).textTheme.titleSmall),
               const SizedBox(height: 2),
               Text(
-                '${transactions.length} transaction${transactions.length == 1 ? '' : 's'}',
+                '$itemsSold item${itemsSold == 1 ? '' : 's'} sold',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],

@@ -57,6 +57,12 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
           icon: const Icon(Icons.arrow_back),
         ),
         title: const Text('Scan Barcode'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
@@ -68,12 +74,33 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
                   borderRadius: BorderRadius.circular(20),
                   child: MobileScanner(
                     onDetect: _handleCapture,
+                    overlayBuilder: (context, constraints) {
+                      final guideSize = constraints.biggest.shortestSide * 0.72;
+                      return Center(
+                        child: Container(
+                          width: guideSize,
+                          height: guideSize,
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: Theme.of(context).colorScheme.secondary,
+                              width: 3,
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                        ),
+                      );
+                    },
                     errorBuilder: (context, error) => Center(
                       child: Padding(
                         padding: const EdgeInsets.all(16),
                         child: Text(
-                          'Camera unavailable: ${error.errorCode.name}. '
-                          'Enter or scan a barcode below.',
+                          error.errorCode ==
+                                  MobileScannerErrorCode.permissionDenied
+                              ? 'Camera permission denied. Allow camera access '
+                                    'in device settings, or enter a barcode below.'
+                              : 'Camera unavailable: '
+                                    '${error.errorCode.message} '
+                                    'Enter or scan a barcode below.',
                           textAlign: TextAlign.center,
                         ),
                       ),
@@ -82,7 +109,9 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              const Text('Align a registered product barcode in the camera.'),
+              const Text(
+                'Align a supported barcode or QR code inside the frame.',
+              ),
             ] else ...[
               const Expanded(
                 child: Center(

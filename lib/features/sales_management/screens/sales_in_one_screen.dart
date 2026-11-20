@@ -7,8 +7,8 @@ import '../../settings/services/activity_log_service.dart';
 import '../models/sales_transaction_record.dart';
 import '../services/sales_in_one_service.dart';
 import 'barcode_scanner_screen.dart';
-import 'receipt_screen.dart';
 import 'sales_history_screen.dart';
+import 'sales_payment_screen.dart';
 
 class SalesInOneScreen extends StatefulWidget {
   final ProductController productController;
@@ -26,9 +26,40 @@ class SalesInOneScreen extends StatefulWidget {
   State<SalesInOneScreen> createState() => _SalesInOneScreenState();
 }
 
+class _SalesCartState {
+  static final Map<String, int> quantities = <String, int>{};
+}
+
+class _CartAmount extends StatelessWidget {
+  final String label;
+  final double amount;
+  final bool bold;
+
+  const _CartAmount({
+    required this.label,
+    required this.amount,
+    this.bold = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final style = bold ? const TextStyle(fontWeight: FontWeight.w700) : null;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: style),
+          Text(formatSalesCurrency(amount), style: style),
+        ],
+      ),
+    );
+  }
+}
+
 class _SalesInOneScreenState extends State<SalesInOneScreen> {
   final _searchController = TextEditingController();
-  final _quantities = <String, int>{};
+  final _quantities = _SalesCartState.quantities;
   String _searchTerm = '';
 
   @override
@@ -100,7 +131,7 @@ class _SalesInOneScreenState extends State<SalesInOneScreen> {
       MaterialPageRoute(
         builder: (_) => ShoppingCartScreen(
           products: widget.productController.state.products,
-          quantities: Map.of(_quantities),
+          quantities: _quantities,
           saleService: SalesInOneService(
             productController: widget.productController,
             saleRepository: widget.saleRepository,
@@ -109,7 +140,11 @@ class _SalesInOneScreenState extends State<SalesInOneScreen> {
         ),
       ),
     );
-    if (!mounted || result != true) return;
+    if (!mounted) return;
+    if (result != true) {
+      setState(() {});
+      return;
+    }
     setState(_quantities.clear);
     await widget.productController.loadProducts();
     if (mounted && widget.productController.state.error != null) {
@@ -242,24 +277,117 @@ class _SalesInOneScreenState extends State<SalesInOneScreen> {
   Widget _productCard(ProductModel product) {
     final selected = _quantities[product.id] ?? 0;
     final outOfStock = product.quantity <= 0;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isLowStock = product.isLowStock && !outOfStock;
+    final stockColor = outOfStock
+        ? colorScheme.error
+        : isLowStock
+        ? colorScheme.secondary
+        : colorScheme.primary;
+    final stockLabel = outOfStock
+        ? 'Out of stock'
+        : isLowStock
+        ? 'Low stock'
+        : 'In stock';
+
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        title: Text(product.name),
-        subtitle: Text(
-          [
-            if (product.category.isNotEmpty) product.category,
-            '${formatSalesCurrency(product.sellingPrice)} · '
-                '${product.quantity} in stock',
-            if (selected > 0) '$selected in cart',
-          ].join(' · '),
-        ),
-        trailing: IconButton(
-          tooltip: outOfStock ? 'Out of stock' : 'Add ${product.name}',
-          onPressed: outOfStock ? null : () => _addProduct(product),
-          icon: Icon(
-            outOfStock ? Icons.remove_shopping_cart : Icons.add_circle_outline,
-          ),
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    product.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (product.category.trim().isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      product.category,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        'Stock: ${product.quantity}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: stockColor,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: stockColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          stockLabel,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: stockColor,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      if (selected > 0)
+                        Text(
+                          '$selected in cart',
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    formatSalesCurrency(product.sellingPrice),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: colorScheme.primary,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 4),
+            IconButton.filledTonal(
+              tooltip: outOfStock ? 'Out of stock' : 'Add ${product.name}',
+              onPressed: outOfStock ? null : () => _addProduct(product),
+              icon: Icon(
+                outOfStock
+                    ? Icons.remove_shopping_cart_rounded
+                    : Icons.add_rounded,
+              ),
+            ),
+            if (selected > 0) ...[
+              const SizedBox(width: 4),
+              IconButton(
+                tooltip: 'Remove ${product.name} from cart',
+                onPressed: () => setState(() => _quantities.remove(product.id)),
+                icon: const Icon(Icons.undo_rounded),
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -288,7 +416,7 @@ class _ShoppingCartScreenState extends State<ShoppingCartScreen> {
   @override
   void initState() {
     super.initState();
-    _quantities = Map.of(widget.quantities);
+    _quantities = widget.quantities;
   }
 
   List<ProductModel> get _cartProducts {
@@ -328,7 +456,7 @@ class _ShoppingCartScreenState extends State<ShoppingCartScreen> {
   Future<void> _proceedToPayment() async {
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => PaymentScreen(
+        builder: (_) => SalesPaymentScreen(
           quantities: Map.of(_quantities),
           products: _cartProducts,
           saleService: widget.saleService,
@@ -337,6 +465,27 @@ class _ShoppingCartScreenState extends State<ShoppingCartScreen> {
     );
     if (!mounted || result != true) return;
     Navigator.of(context).pop(true);
+  }
+
+  Future<void> _clearCart() async {
+    final clear = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear cart?'),
+        content: const Text('Remove all selected products from this sale?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep Cart'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Clear Cart'),
+          ),
+        ],
+      ),
+    );
+    if (clear == true && mounted) setState(_quantities.clear);
   }
 
   @override
@@ -349,6 +498,13 @@ class _ShoppingCartScreenState extends State<ShoppingCartScreen> {
           icon: const Icon(Icons.arrow_back),
         ),
         title: const Text('Shopping Cart'),
+        actions: [
+          IconButton(
+            tooltip: 'Clear cart',
+            onPressed: _quantities.isEmpty ? null : _clearCart,
+            icon: const Icon(Icons.remove_shopping_cart_outlined),
+          ),
+        ],
       ),
       body: _cartProducts.isEmpty
           ? const Center(child: Text('Your cart is empty.'))
@@ -423,218 +579,6 @@ class _ShoppingCartScreenState extends State<ShoppingCartScreen> {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _CartAmount extends StatelessWidget {
-  final String label;
-  final double amount;
-  final bool bold;
-
-  const _CartAmount({
-    required this.label,
-    required this.amount,
-    this.bold = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final style = bold ? const TextStyle(fontWeight: FontWeight.w700) : null;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: style),
-          Text(formatSalesCurrency(amount), style: style),
-        ],
-      ),
-    );
-  }
-}
-
-class PaymentScreen extends StatefulWidget {
-  final Map<String, int> quantities;
-  final List<ProductModel> products;
-  final SalesInOneService saleService;
-
-  const PaymentScreen({
-    super.key,
-    required this.quantities,
-    required this.products,
-    required this.saleService,
-  });
-
-  @override
-  State<PaymentScreen> createState() => _PaymentScreenState();
-}
-
-class _PaymentScreenState extends State<PaymentScreen> {
-  late final TextEditingController _amountController;
-  final String _transactionId = 'BZT-${DateTime.now().microsecondsSinceEpoch}';
-  String _paymentMethod = 'Cash';
-  bool _submitting = false;
-
-  int get _totalCents {
-    final prices = {
-      for (final product in widget.products)
-        product.id: (product.sellingPrice * 100).round(),
-    };
-    return widget.quantities.entries.fold(
-      0,
-      (sum, entry) => sum + (prices[entry.key] ?? 0) * entry.value,
-    );
-  }
-
-  double get _total => _totalCents / 100;
-
-  @override
-  void initState() {
-    super.initState();
-    _amountController = TextEditingController(text: _total.toStringAsFixed(2));
-  }
-
-  @override
-  void dispose() {
-    _amountController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _completeSale() async {
-    if (_submitting) return;
-    final amountPaid = double.tryParse(_amountController.text.trim());
-    if (amountPaid == null || !amountPaid.isFinite) {
-      _showError('Enter a valid payment amount.');
-      return;
-    }
-    setState(() => _submitting = true);
-    try {
-      final transaction = await widget.saleService.completeSale(
-        quantities: widget.quantities,
-        amountPaid: amountPaid,
-        paymentMethod: _paymentMethod,
-        transactionId: _transactionId,
-      );
-      if (!mounted) return;
-      await Navigator.of(context).push<void>(
-        MaterialPageRoute(
-          builder: (_) => ReceiptScreen(transaction: transaction),
-        ),
-      );
-      if (mounted) Navigator.of(context).pop(true);
-    } catch (error) {
-      if (mounted) _showError(error.toString());
-    } finally {
-      if (mounted) setState(() => _submitting = false);
-    }
-  }
-
-  void _showError(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final amountPaid = double.tryParse(_amountController.text) ?? 0;
-    final visibleChange = _paymentMethod == 'Cash'
-        ? (amountPaid - _total).clamp(0, double.infinity)
-        : 0.0;
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          tooltip: 'Back to cart',
-          onPressed: _submitting
-              ? null
-              : () => Navigator.of(context).pop(false),
-          icon: const Icon(Icons.arrow_back),
-        ),
-        title: const Text('Payment'),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Total Amount',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    formatSalesCurrency(_total),
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            initialValue: _paymentMethod,
-            decoration: const InputDecoration(labelText: 'Payment Method'),
-            items: SalesInOneService.paymentMethods
-                .map(
-                  (method) =>
-                      DropdownMenuItem(value: method, child: Text(method)),
-                )
-                .toList(),
-            onChanged: _submitting
-                ? null
-                : (method) {
-                    if (method == null) return;
-                    setState(() {
-                      _paymentMethod = method;
-                      if (method != 'Cash') {
-                        _amountController.text = _total.toStringAsFixed(2);
-                      }
-                    });
-                  },
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            key: const ValueKey('amount-paid'),
-            controller: _amountController,
-            enabled: !_submitting,
-            decoration: const InputDecoration(
-              labelText: 'Amount Received',
-              prefixText: '₱ ',
-              border: OutlineInputBorder(),
-            ),
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: 16),
-          Card(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            child: ListTile(
-              title: const Text('Change'),
-              trailing: Text(
-                formatSalesCurrency(visibleChange),
-                key: const ValueKey('change-due'),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          FilledButton.icon(
-            onPressed: _submitting ? null : _completeSale,
-            icon: _submitting
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.check_circle_outline),
-            label: Text(_submitting ? 'Saving Sale' : 'Complete Sale'),
-          ),
-        ],
       ),
     );
   }

@@ -14,6 +14,7 @@ import 'package:bizniz_tracker/features/sales/domain/sale_repository.dart';
 import 'package:bizniz_tracker/features/sales/presentation/add_sale_screen.dart';
 import 'package:bizniz_tracker/features/sales/presentation/sales_summary_screen.dart';
 import 'package:bizniz_tracker/features/product_and_inventory_management/screens/expiration_list_screen.dart';
+import 'package:bizniz_tracker/features/sales_management/screens/barcode_scanner_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,6 +35,19 @@ void main() async {
       child: const MyApp(),
     ),
   );
+}
+
+bool _containsDuplicateBarcode(
+  Iterable<ProductModel> products,
+  ProductModel candidate,
+) {
+  final barcode = candidate.barcode.trim().toLowerCase();
+  return barcode.isNotEmpty &&
+      products.any(
+        (product) =>
+            product.id != candidate.id &&
+            product.barcode.trim().toLowerCase() == barcode,
+      );
 }
 
 class MyApp extends StatelessWidget {
@@ -319,6 +333,12 @@ class _InventoryScreenState extends State<InventoryManagementScreen> {
             )
           : Column(
               children: [
+                _buildInventoryOverview(
+                  context,
+                  allProducts.length,
+                  allProducts.where((product) => product.isLowStock).length,
+                  categoryList.length,
+                ),
                 // Category chips row
                 Padding(
                   padding: const EdgeInsets.symmetric(
@@ -402,78 +422,7 @@ class _InventoryScreenState extends State<InventoryManagementScreen> {
                           itemCount: products.length,
                           itemBuilder: (context, index) {
                             final product = products[index];
-                            final isLowStock = product.isLowStock;
-                            return ListTile(
-                              title: Text(
-                                product.name,
-                                style: Theme.of(context).textTheme.titleMedium
-                                    ?.copyWith(
-                                      fontWeight: isLowStock
-                                          ? FontWeight.bold
-                                          : FontWeight.normal,
-                                      color: isLowStock
-                                          ? Theme.of(context).colorScheme.error
-                                          : Theme.of(
-                                              context,
-                                            ).textTheme.titleMedium?.color,
-                                    ),
-                              ),
-                              subtitle: Text(
-                                'ID: ${product.id}\nQty: ${product.quantity} (min: ${product.minStock}), '
-                                'Cost: ${formatCurrency(product.costPrice)}, '
-                                'Sell: ${formatCurrency(product.sellingPrice)}',
-                              ),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (isLowStock)
-                                    Container(
-                                      decoration: BoxDecoration(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.error,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                      child: Text(
-                                        'LOW',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodyMedium
-                                            ?.copyWith(
-                                              color: Colors.white,
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                      ),
-                                    ),
-                                  PopupMenuButton(
-                                    itemBuilder: (context) => [
-                                      PopupMenuItem(
-                                        onTap: () => _showEditProductDialog(
-                                          context,
-                                          widget.productController,
-                                          product,
-                                          widget.onRefresh,
-                                        ),
-                                        child: const Text('Edit'),
-                                      ),
-                                      PopupMenuItem(
-                                        onTap: () {
-                                          widget.productController
-                                              .deleteProduct(product.id);
-                                          widget.onRefresh();
-                                        },
-                                        child: const Text('Delete'),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            );
+                            return _buildInventoryProductCard(context, product);
                           },
                         ),
                 ),
@@ -488,6 +437,226 @@ class _InventoryScreenState extends State<InventoryManagementScreen> {
         ),
         tooltip: 'Add Product',
         child: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  Widget _buildInventoryOverview(
+    BuildContext context,
+    int totalProducts,
+    int lowStockProducts,
+    int categoryCount,
+  ) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return Card(
+      margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: colorScheme.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(
+                Icons.inventory_2_rounded,
+                color: colorScheme.primary,
+                size: 26,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Inventory Overview',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      _inventoryMetric('Products', totalProducts, colorScheme),
+                      _inventoryMetric(
+                        'Low stock',
+                        lowStockProducts,
+                        colorScheme,
+                        valueColor: colorScheme.secondary,
+                      ),
+                      _inventoryMetric(
+                        'Categories',
+                        categoryCount,
+                        colorScheme,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _inventoryMetric(
+    String label,
+    int value,
+    ColorScheme colorScheme, {
+    Color? valueColor,
+  }) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$value',
+            style: TextStyle(
+              color: valueColor ?? colorScheme.primary,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: colorScheme.onSurfaceVariant,
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInventoryProductCard(
+    BuildContext context,
+    ProductModel product,
+  ) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isOutOfStock = product.quantity <= 0;
+    final isLowStock = product.isLowStock;
+    final statusColor = isOutOfStock
+        ? colorScheme.error
+        : isLowStock
+        ? colorScheme.secondary
+        : colorScheme.primary;
+    final statusLabel = isOutOfStock
+        ? 'Out of stock'
+        : isLowStock
+        ? 'Low stock'
+        : 'In stock';
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    product.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        'Stock: ${product.quantity}',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: statusColor,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          statusLabel,
+                          maxLines: 1,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: statusColor,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Category: ${product.category.trim().isEmpty ? 'Not set' : product.category}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  Text(
+                    'Cost: ${formatCurrency(product.costPrice)}  ·  '
+                    'Sell: ${formatCurrency(product.sellingPrice)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  Text(
+                    'ID: ${product.id}  ·  Min: ${product.minStock}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            PopupMenuButton<void>(
+              tooltip: 'Product options',
+              itemBuilder: (context) => [
+                PopupMenuItem<void>(
+                  onTap: () => _showEditProductDialog(
+                    context,
+                    widget.productController,
+                    product,
+                    widget.onRefresh,
+                  ),
+                  child: const Text('Edit'),
+                ),
+                PopupMenuItem<void>(
+                  onTap: () {
+                    widget.productController.deleteProduct(product.id);
+                    widget.onRefresh();
+                  },
+                  child: const Text('Delete'),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -609,13 +778,7 @@ class _InventoryScreenState extends State<InventoryManagementScreen> {
     ProductController controller,
     ProductModel candidate,
   ) {
-    final barcode = candidate.barcode.trim().toLowerCase();
-    return barcode.isNotEmpty &&
-        controller.state.products.any(
-          (product) =>
-              product.id != candidate.id &&
-              product.barcode.trim().toLowerCase() == barcode,
-        );
+    return _containsDuplicateBarcode(controller.state.products, candidate);
   }
 }
 
@@ -1163,10 +1326,25 @@ class _InventoryAlertsScreenState extends State<InventoryAlertsScreen> {
                       context: context,
                       builder: (dialogContext) => _ProductFormDialog(
                         onSave: (product) async {
-                          await widget.productController!.addProduct(product);
+                          final productController =
+                              widget.productController!;
+                          if (_containsDuplicateBarcode(
+                            productController.state.products,
+                            product,
+                          )) {
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'That barcode is already assigned to another product.',
+                                ),
+                              ),
+                            );
+                            return;
+                          }
+                          await productController.addProduct(product);
                           if (!mounted || !dialogContext.mounted) return;
                           Navigator.of(dialogContext).pop();
-                          final error = widget.productController!.state.error;
+                          final error = productController.state.error;
                           if (error != null) {
                             ScaffoldMessenger.of(this.context).showSnackBar(
                               SnackBar(
@@ -1292,132 +1470,288 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(
-        widget.initialProduct == null ? 'Add Product' : 'Edit Product',
-        style: Theme.of(context).textTheme.titleMedium,
+  Future<void> _scanBarcode() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    final barcode = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
+        builder: (_) => const BarcodeScannerScreen(),
       ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _idController,
-              decoration: const InputDecoration(labelText: 'Product ID'),
-              enabled: widget.initialProduct == null,
-            ),
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(labelText: 'Name'),
-            ),
-            TextField(
-              controller: _quantityController,
-              decoration: const InputDecoration(labelText: 'Quantity'),
-              keyboardType: TextInputType.number,
-            ),
-            TextField(
-              controller: _costPriceController,
-              decoration: const InputDecoration(
-                labelText: 'Cost Price',
-                prefixText: '₱ ',
-              ),
-              keyboardType: TextInputType.number,
-            ),
-            TextField(
-              controller: _sellingPriceController,
-              decoration: const InputDecoration(
-                labelText: 'Selling Price',
-                prefixText: '₱ ',
-              ),
-              keyboardType: TextInputType.number,
-            ),
-            TextField(
-              controller: _categoryController,
-              decoration: const InputDecoration(labelText: 'Category'),
-            ),
-            TextField(
-              controller: _minStockController,
-              decoration: const InputDecoration(labelText: 'Min Stock'),
-              keyboardType: TextInputType.number,
-            ),
-            TextField(
-              controller: _barcodeController,
-              decoration: const InputDecoration(
-                labelText: 'Barcode (optional)',
-              ),
-              keyboardType: TextInputType.text,
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            final name = _nameController.text.trim();
-            final quantity = int.tryParse(_quantityController.text);
-            final costPrice = double.tryParse(_costPriceController.text);
-            final sellingPrice = double.tryParse(_sellingPriceController.text);
-            final minStock = int.tryParse(_minStockController.text);
+    );
+    if (!mounted || barcode == null) return;
 
-            if (name.isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Enter a product name.')),
-              );
-              return;
-            }
-            if (quantity == null || quantity < 0) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Enter a valid non-negative quantity.'),
-                ),
-              );
-              return;
-            }
-            if (costPrice == null ||
-                !costPrice.isFinite ||
-                costPrice < 0 ||
-                sellingPrice == null ||
-                !sellingPrice.isFinite ||
-                sellingPrice < 0) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Enter valid non-negative prices.'),
-                ),
-              );
-              return;
-            }
-            if (minStock == null || minStock < 0) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Enter a valid non-negative minimum stock.'),
-                ),
-              );
-              return;
-            }
+    final value = barcode.trim();
+    if (value.isEmpty) return;
+    _barcodeController.value = TextEditingValue(
+      text: value,
+      selection: TextSelection.collapsed(offset: value.length),
+    );
+  }
 
-            final product = ProductModel(
-              id: _idController.text.trim().isEmpty
-                  ? DateTime.now().millisecondsSinceEpoch.toString()
-                  : _idController.text.trim(),
-              name: name,
-              quantity: quantity,
-              costPrice: costPrice,
-              sellingPrice: sellingPrice,
-              category: _categoryController.text.trim(),
-              minStock: minStock,
-              barcode: _barcodeController.text.trim(),
-            );
-            widget.onSave(product);
-          },
-          child: const Text('Save'),
+  Widget _buildField({
+    required String label,
+    required TextEditingController controller,
+    TextInputType? keyboardType,
+    bool enabled = true,
+    String? prefixText,
+    Widget? suffixIcon,
+    TextCapitalization textCapitalization = TextCapitalization.none,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 2, bottom: 7),
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        SizedBox(
+          height: 56,
+          child: TextField(
+            controller: controller,
+            enabled: enabled,
+            keyboardType: keyboardType,
+            textCapitalization: textCapitalization,
+            autocorrect: false,
+            decoration: InputDecoration(
+              prefixText: prefixText,
+              suffixIcon: suffixIcon,
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 14,
+              ),
+            ),
+          ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSection(String title, List<Widget> fields) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              title,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          ...fields.expand((field) => [field, const SizedBox(height: 16)]),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 560,
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    widget.initialProduct == null
+                        ? 'Add Product'
+                        : 'Edit Product',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildSection('Basic Information', [
+                        _buildField(
+                          label: 'Product ID',
+                          controller: _idController,
+                          enabled: widget.initialProduct == null,
+                        ),
+                        _buildField(
+                          label: 'Product Name',
+                          controller: _nameController,
+                        ),
+                        _buildField(
+                          label: 'Category',
+                          controller: _categoryController,
+                        ),
+                      ]),
+                      _buildSection('Pricing and Inventory', [
+                        _buildField(
+                          label: 'Quantity',
+                          controller: _quantityController,
+                          keyboardType: TextInputType.number,
+                        ),
+                        _buildField(
+                          label: 'Cost Price',
+                          controller: _costPriceController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          prefixText: '₱ ',
+                        ),
+                        _buildField(
+                          label: 'Selling Price',
+                          controller: _sellingPriceController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          prefixText: '₱ ',
+                        ),
+                        _buildField(
+                          label: 'Minimum Stock',
+                          controller: _minStockController,
+                          keyboardType: TextInputType.number,
+                        ),
+                      ]),
+                      _buildSection('Additional Information', [
+                        _buildField(
+                          label: 'Barcode (Optional)',
+                          controller: _barcodeController,
+                          keyboardType: TextInputType.text,
+                          suffixIcon: IconButton(
+                            tooltip: 'Scan barcode',
+                            onPressed: _scanBarcode,
+                            icon: const Icon(Icons.qr_code_scanner_rounded),
+                          ),
+                        ),
+                      ]),
+                    ],
+                  ),
+                ),
+              ),
+              const Divider(height: 1),
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: SizedBox(
+                          height: 50,
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Cancel'),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: SizedBox(
+                          height: 50,
+                          child: FilledButton(
+                            onPressed: () {
+                              final name = _nameController.text.trim();
+                              final quantity = int.tryParse(
+                                _quantityController.text,
+                              );
+                              final costPrice = double.tryParse(
+                                _costPriceController.text,
+                              );
+                              final sellingPrice = double.tryParse(
+                                _sellingPriceController.text,
+                              );
+                              final minStock = int.tryParse(
+                                _minStockController.text,
+                              );
+
+                              if (name.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Enter a product name.'),
+                                  ),
+                                );
+                                return;
+                              }
+                              if (quantity == null || quantity < 0) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Enter a valid non-negative quantity.',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
+                              if (costPrice == null ||
+                                  !costPrice.isFinite ||
+                                  costPrice < 0 ||
+                                  sellingPrice == null ||
+                                  !sellingPrice.isFinite ||
+                                  sellingPrice < 0) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Enter valid non-negative prices.',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
+                              if (minStock == null || minStock < 0) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Enter a valid non-negative minimum stock.',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
+
+                              final product = ProductModel(
+                                id: _idController.text.trim().isEmpty
+                                    ? DateTime.now().millisecondsSinceEpoch
+                                          .toString()
+                                    : _idController.text.trim(),
+                                name: name,
+                                quantity: quantity,
+                                costPrice: costPrice,
+                                sellingPrice: sellingPrice,
+                                category: _categoryController.text.trim(),
+                                minStock: minStock,
+                                barcode: _barcodeController.text.trim(),
+                              );
+                              widget.onSave(product);
+                            },
+                            child: const Text('Save'),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

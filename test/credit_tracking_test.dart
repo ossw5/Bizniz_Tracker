@@ -15,6 +15,8 @@ import 'package:bizniz_tracker/features/products/domain/repositories.dart';
 import 'package:bizniz_tracker/features/products/presentation/controllers.dart';
 import 'package:bizniz_tracker/features/sales/domain/sale.dart';
 import 'package:bizniz_tracker/features/sales/domain/sale_repository.dart';
+import 'package:bizniz_tracker/features/sales_management/screens/sales_payment_screen.dart';
+import 'package:bizniz_tracker/features/sales_management/services/sales_in_one_service.dart';
 
 void main() {
   late Directory directory;
@@ -124,6 +126,113 @@ void main() {
       throwsA(isA<ArgumentError>()),
     );
   });
+
+  testWidgets(
+    'credit checkout hides payment details and shows unpaid balance',
+    (tester) async {
+      final memoryCreditService = _MemoryCreditService();
+      final customer = await memoryCreditService.addCustomer(
+        fullName: 'Mila Santos',
+        phone: '09170000000',
+        address: 'Manila',
+        notes: '',
+      );
+      await memoryCreditService.addCredit(
+        customer: customer,
+        saleId: 'previous-sale',
+        itemName: 'Bread',
+        quantity: 1,
+        unitPrice: 10,
+        creditDate: DateTime(2026, 11, 10),
+        dueDate: DateTime(2026, 12, 10),
+      );
+      final products = [
+        ProductModel(
+          id: 'bread',
+          name: 'Bread',
+          quantity: 5,
+          costPrice: 8,
+          sellingPrice: 15,
+        ),
+      ];
+      final controller = ProductController(
+        repository: _MemoryProductRepository(products),
+      )..state = ProductState(products: products);
+      final sales = _MemorySaleRepository();
+      final saleService = SalesInOneService(
+        productController: controller,
+        saleRepository: sales,
+        activityLog: null,
+        creditService: memoryCreditService,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.buildTheme(),
+          home: SalesPaymentScreen(
+            quantities: const {'bread': 1},
+            products: products,
+            saleService: saleService,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Credit'));
+      await tester.pumpAndSettle();
+      expect(find.text('Payment Details'), findsNothing);
+      expect(find.text('Amount Received'), findsNothing);
+      expect(find.text('Change'), findsNothing);
+      expect(find.text('Total Amount Owed'), findsOneWidget);
+      expect(find.text('UNPAID'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('Complete Credit Sale'),
+        100,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('Complete Credit Sale'), findsOneWidget);
+
+      await tester.drag(find.byType(ListView), const Offset(0, 1000));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(DropdownButtonFormField<CreditCustomer>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Mila Santos').last);
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Existing outstanding balance:'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Cash'));
+      await tester.pumpAndSettle();
+      expect(find.text('Payment Details'), findsOneWidget);
+      expect(find.text('Amount Received'), findsOneWidget);
+      expect(find.text('Change'), findsOneWidget);
+
+      await tester.tap(find.text('Credit'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Complete Credit Sale'),
+        100,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Complete Credit Sale'));
+      await tester.pumpAndSettle();
+      expect(sales.records, hasLength(1));
+      expect(sales.records.single.paymentMethod, 'Credit');
+      expect(sales.records.single.amountPaid, 0);
+      expect(find.text('Payment Status'), findsOneWidget);
+      expect(find.text('UNPAID'), findsOneWidget);
+      expect(find.text('Change'), findsNothing);
+      final newCredit = (await memoryCreditService.loadCredits()).singleWhere(
+        (credit) => credit.saleId == sales.records.single.transactionId,
+      );
+      expect(newCredit.originalAmount, 15);
+      expect(newCredit.outstandingBalance, 15);
+      expect(
+        await memoryCreditService.loadPayments(creditId: newCredit.id),
+        isEmpty,
+      );
+    },
+  );
 
   testWidgets(
     'credit transaction updates inventory and partial payment reduces balance',
@@ -316,6 +425,34 @@ class _MemoryCreditService extends CreditTrackingService {
       unitPrice: unitPrice,
       originalAmount: amount,
       outstandingBalance: amount,
+      creditDate: creditDate,
+      dueDate: dueDate,
+    );
+    credits.add(credit);
+    return credit;
+  }
+
+  @override
+  Future<CreditAccount> addTransactionCredit({
+    required CreditCustomer customer,
+    required String saleId,
+    required String itemName,
+    required int quantity,
+    required double originalAmount,
+    required double initialPayment,
+    required DateTime creditDate,
+    required DateTime dueDate,
+  }) async {
+    final credit = CreditAccount(
+      id: 'memory-credit-${_sequence++}',
+      customerId: customer.id,
+      customerName: customer.fullName,
+      saleId: saleId,
+      itemName: itemName,
+      quantity: quantity,
+      unitPrice: originalAmount,
+      originalAmount: originalAmount,
+      outstandingBalance: originalAmount - initialPayment,
       creditDate: creditDate,
       dueDate: dueDate,
     );
